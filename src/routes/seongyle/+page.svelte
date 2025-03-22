@@ -1,33 +1,76 @@
 <script>
   import { onMount } from 'svelte'
+  import { createShaderModule } from '$lib/shader-module'
 
   let canvasElement
   let errorMessage = ''
-
-  function resizeCanvas() {
-    if (canvasElement) {
-      // 컨테이너의 크기에 맞춰 캔버스 크기 조정
-      const container = canvasElement.parentElement
-      canvasElement.width = container.clientWidth
-      canvasElement.height = container.clientHeight
-    }
-  }
+  let device
+  let context
+  let pipeline
 
   async function initWebGPU() {
-    console.log('initWebGPU')
+    const adapter = await navigator.gpu?.requestAdapter()
+    device = await adapter?.requestDevice()
+    if (!device) {
+      errorMessage = 'WebGPU 장치를 찾을 수 없습니다.'
+      return
+    }
+    const canvas = canvasElement
+    context = canvas.getContext('webgpu')
+    if (!context) {
+      errorMessage = 'WebGPU 컨텍스트를 찾을 수 없습니다.'
+      return
+    }
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
+    context.configure({
+      device,
+      format: presentationFormat,
+    })
+
+    const shaderModule = createShaderModule(device, {
+      label: 'draw red triangle',
+    })
+
+    pipeline = device.createRenderPipeline({
+      label: 'draw red triangle',
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vs',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs',
+        targets: [{ format: presentationFormat }],
+          },
+    })
   }
 
-  onMount(() => {
-    initWebGPU()
-    resizeCanvas()
-    
-    // 윈도우 리사이즈 이벤트에 대응
-    window.addEventListener('resize', resizeCanvas)
-    
-    // 컴포넌트 언마운트 시 이벤트 리스너 제거
-    return () => {
-      window.removeEventListener('resize', resizeCanvas)
+  function render() {
+    const renderPassDescriptor = {
+      label: 'canvas render pass',
+      colorAttachments: [{
+        // clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        clearValue: [0, 0, 0, 1],
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
     }
+    renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView()
+    const encoder = device.createCommandEncoder({ label: 'command encoder' })
+
+    const pass = encoder.beginRenderPass(renderPassDescriptor)
+    pass.setPipeline(pipeline)
+    pass.draw(3)
+    pass.end()
+
+    const commandBuffer = encoder.finish()
+    device.queue.submit([commandBuffer])
+  }
+
+  onMount(async () => {
+    await initWebGPU()
+    render()
   })
 </script>
 
