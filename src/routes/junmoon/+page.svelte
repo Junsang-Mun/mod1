@@ -1,16 +1,26 @@
 <script>
     import { onMount } from "svelte";
-    import shaderCode from "./square.wgsl?raw";
+    import shaderCode from "./mouse_interaction.wgsl?raw";
     import image from "$lib/texture.jpeg";
 
     let timeBuffer;
+    let mouseBuffer;
     let startTime = performance.now();
-
+    let mouseX = 0;
+    let mouseY = 0;
     let canvasElement;
     let errorMessage = "";
     let device, context, pipeline, animationFrameId;
     let sampler, imageTexture, msaaTexture, bindGroup;
     let canvasWidth = 768, canvasHeight = 1024;
+
+    function updateMousePosition(event) {
+        const rect = canvasElement.getBoundingClientRect();
+        mouseX = (event.clientX - rect.left) / canvasWidth;
+        mouseY = (event.clientY - rect.top) / canvasHeight;
+        console.log(mouseX, mouseY);
+        device.queue.writeBuffer(mouseBuffer, 0, new Float32Array([mouseX, mouseY]));
+    }
 
     async function loadImageBitmap(src) {
         const img = new Image();
@@ -80,9 +90,40 @@
         // 쉐이더 모듈
         const shaderModule = device.createShaderModule({ code: shaderCode });
 
+        // Create an explicit bind group layout that matches the shader bindings
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    sampler: { type: 'filtering' }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    texture: { sampleType: 'float', viewDimension: '2d', multisampled: false }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: { type: 'uniform' }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: { type: 'uniform' }
+                }
+            ]
+        });
+
+        // Create a pipeline layout with the custom bind group layout
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+
         // 렌더 파이프라인 생성
         pipeline = device.createRenderPipeline({
-            layout: "auto",
+            layout: pipelineLayout,
             vertex: {
                 module: shaderModule,
                 entryPoint: "vs",
@@ -100,16 +141,29 @@
         // 시간 버퍼
         timeBuffer = device.createBuffer({
             size: 4,
-            usage: GPUBufferUsage.UNIFORM,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
+
+        // 마우스 버퍼
+        mouseBuffer = device.createBuffer({
+            size: 8, // Needs to be 8 bytes for two float32 values (mouseX, mouseY)
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        // 시간 버퍼 초기화
+        device.queue.writeBuffer(timeBuffer, 0, new Float32Array([0.0]));
+        
+        // 마우스 버퍼 초기화
+        device.queue.writeBuffer(mouseBuffer, 0, new Float32Array([0.0, 0.0]));
 
         // 바인드 그룹 (이미지 텍스처 사용)
         bindGroup = device.createBindGroup({
-            layout: pipeline.getBindGroupLayout(0),
+            layout: bindGroupLayout,
             entries: [
                 { binding: 0, resource: sampler },
                 { binding: 1, resource: imageTexture.createView() },
                 { binding: 2, resource: { buffer: timeBuffer } },
+                { binding: 3, resource: { buffer: mouseBuffer } },
             ],
         });
     }
@@ -142,10 +196,12 @@
 
     onMount(async () => {
         await initWebGPU();
+        canvasElement.addEventListener("mousemove", updateMousePosition);
         render();
 
         return () => {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            canvasElement.removeEventListener("mousemove", updateMousePosition);
         };
     });
 </script>
