@@ -43,8 +43,6 @@ struct TimeUniform {
   );
 
   var pos = positions[vertexIndex];
-  // Apply rotation
-  pos = rotation * pos;
   var uv = uvs[vertexIndex];
 
   var output: VertexOut;
