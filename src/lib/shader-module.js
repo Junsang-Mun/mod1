@@ -2,7 +2,7 @@
  * @param {GPUDevice} device
  * @param {{ label?: string, code?: string }} options
  * @returns {GPUShaderModule}
- * @description Creates a shader module with the given label and code. if code is not provided, the default code will be used.
+ * @description Creates a shader module with the given label and code. If code is not provided, the default code will be used.
  */
 function createShaderModule(device, { label = 'default shader', code } = {}) {
   if (!device) {
