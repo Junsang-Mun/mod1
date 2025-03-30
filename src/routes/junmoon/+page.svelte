@@ -1,6 +1,6 @@
 <script>
     import { onMount } from "svelte";
-    import shaderCode from "./triangle.wgsl?raw";
+    import shaderCode from "./square.wgsl?raw";
     import image from "$lib/texture.jpeg";
     let timeBuffer;
     let startTime = performance.now();
