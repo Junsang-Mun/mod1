@@ -110,7 +110,7 @@
 
         renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, bindGroup);
-        renderPass.draw(3);
+        renderPass.draw(6);
         renderPass.end();
 
         device.queue.submit([encoder.finish()]);

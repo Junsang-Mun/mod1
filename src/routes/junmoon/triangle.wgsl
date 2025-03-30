@@ -12,16 +12,26 @@ struct TimeUniform {
 }
 
 @vertex fn vs(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
-  var positions = array<vec2f, 3>(
-    vec2f(0.0, 0.5),
-    vec2f(-0.5, -0.5),
-    vec2f(0.5, -0.5)
+  var positions = array<vec2f, 6>(
+    // First triangle
+    vec2f(-0.5,  0.5),  // Top left
+    vec2f(-0.5, -0.5),  // Bottom left
+    vec2f( 0.5, -0.5),  // Bottom right
+    // Second triangle
+    vec2f(-0.5,  0.5),  // Top left
+    vec2f( 0.5, -0.5),  // Bottom right
+    vec2f( 0.5,  0.5)   // Top right
   );
 
-  var uvs = array<vec2f, 3>(
-    vec2f(0.5, 0.0),
-    vec2f(0.0, 1.0),
-    vec2f(1.0, 1.0)
+  var uvs = array<vec2f, 6>(
+    // First triangle
+    vec2f(0.0, 0.0),  // Top left
+    vec2f(0.0, 1.0),  // Bottom left
+    vec2f(1.0, 1.0),  // Bottom right
+    // Second triangle
+    vec2f(0.0, 0.0),  // Top left
+    vec2f(1.0, 1.0),  // Bottom right
+    vec2f(1.0, 0.0)   // Top right
   );
 
   let angle = timeUniform.time;
@@ -32,11 +42,14 @@ struct TimeUniform {
     vec2f(sinA,  cosA)
   );
 
-  var pos = rotation * positions[vertexIndex];
+  var pos = positions[vertexIndex];
+  // Apply rotation
+  pos = rotation * pos;
+  var uv = uvs[vertexIndex];
 
   var output: VertexOut;
   output.pos = vec4f(pos, 0.0, 1.0);
-  output.uv = uvs[vertexIndex];
+  output.uv = uv;
   return output;
 }
 
