@@ -14,13 +14,13 @@ struct TimeUniform {
 @vertex fn vs(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
   var positions = array<vec2f, 6>(
     // First triangle
-    vec2f(-0.5,  0.5),  // Top left
-    vec2f(-0.5, -0.5),  // Bottom left
-    vec2f( 0.5, -0.5),  // Bottom right
+    vec2f(-1,  1),  // Top left
+    vec2f(-1, -1),  // Bottom left
+    vec2f( 1, -1),  // Bottom right
     // Second triangle
-    vec2f(-0.5,  0.5),  // Top left
-    vec2f( 0.5, -0.5),  // Bottom right
-    vec2f( 0.5,  0.5)   // Top right
+    vec2f(-1,  1),  // Top left
+    vec2f( 1, -1),  // Bottom right
+    vec2f( 1,  1)   // Top right
   );
 
   var uvs = array<vec2f, 6>(
