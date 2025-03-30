@@ -73,7 +73,7 @@
             },
         });
 
-        // 타임 버퍼 생
+        // 타임 버퍼 생성
         timeBuffer = device.createBuffer({
             size: 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
