@@ -1,6 +1,6 @@
 <script>
     import { onMount } from "svelte";
-    import shaderCode from "./mouse_interaction.wgsl?raw";
+    import shaderCode from "./mouse_interaction.wgsl";
     import image from "$lib/texture.jpeg";
 
     let timeBuffer;

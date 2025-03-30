@@ -1,8 +1,3 @@
-@group(0) @binding(0) var mySampler: sampler;
-@group(0) @binding(1) var myTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> timeUniform: TimeUniform;
-@group(0) @binding(3) var<uniform> mouseUniform: MouseUniform;
-
 struct VertexOut {
   @builtin(position) pos: vec4f,
   @location(0) uv: vec2f,
@@ -16,6 +11,11 @@ struct MouseUniform {
   mouseX: f32,
   mouseY: f32
 }
+
+@group(0) @binding(0) var mySampler: sampler;
+@group(0) @binding(1) var myTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> timeUniform: TimeUniform;
+@group(0) @binding(3) var<uniform> mouseUniform: MouseUniform;
 
 @vertex fn vs(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
   var positions = array<vec2f, 6>(
