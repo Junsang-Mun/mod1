@@ -16,9 +16,20 @@
 
     function updateMousePosition(event) {
         const rect = canvasElement.getBoundingClientRect();
-        mouseX = (event.clientX - rect.left) / canvasWidth;
-        mouseY = (event.clientY - rect.top) / canvasHeight;
-        console.log(mouseX, mouseY);
+        // Calculate the scaling factor between the canvas's display size and its internal size
+        const scaleX = canvasWidth / rect.width;
+        const scaleY = canvasHeight / rect.height;
+        
+        // Convert client coordinates to normalized coordinates (0-1)
+        // Apply scaling to account for any canvas resizing
+        mouseX = ((event.clientX - rect.left) * scaleX) / canvasWidth;
+        mouseY = ((event.clientY - rect.top) * scaleY) / canvasHeight;
+        
+        // Clamp values between 0 and 1
+        mouseX = Math.max(0, Math.min(1, mouseX));
+        mouseY = Math.max(0, Math.min(1, mouseY));
+        
+        // Update the uniform buffer with new mouse position
         device.queue.writeBuffer(mouseBuffer, 0, new Float32Array([mouseX, mouseY]));
     }
 
