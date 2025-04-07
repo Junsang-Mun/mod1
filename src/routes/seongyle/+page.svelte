@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { createShaderModule } from '$lib/shader-module'
+  import GUI from 'lil-gui'
 
   let canvasElement
   let errorMessage = ''
@@ -16,15 +17,24 @@
   let indexCount = 0
   let isLoading = true
   let loadingProgress = 0
+  let gui
 
   // GUI 설정값
-  let rotationSpeed = 1.0
-  let modelScale = 1.0
-  let rotateX = 0
-  let rotateY = 0
-  let rotateZ = 0
-  let backgroundColor = { r: 0, g: 0, b: 0, a: 1 }
-  let wireframe = false
+  const config = {
+    rotationSpeed: 1.0,
+    modelScale: 1.0,
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    wireframe: false,
+    backgroundColor: '#000000',
+    resetRotation: () => {
+      config.rotateX = 0
+      config.rotateY = 0
+      config.rotateZ = 0
+      updateConfigBuffer()
+    }
+  }
 
   // 설정값 구조체
   const configBufferSize = 64 // 최소 48바이트 (12개의 float32) 필요, 여유있게 64로 설정
@@ -354,7 +364,7 @@
           targets: [{ format: presentationFormat }]
         },
         primitive: {
-          topology: wireframe ? 'line-list' : 'triangle-list',
+          topology: config.wireframe ? 'line-list' : 'triangle-list',
           cullMode: 'back'
         },
         depthStencil: {
@@ -366,6 +376,10 @@
 
       isLoading = false
       console.log('WebGPU 초기화 완료')
+      
+      // GUI 설정 초기화 (로딩 완료 후)
+      initGUI()
+      
       return true
     } catch (e) {
       console.error('WebGPU 초기화 오류:', e)
@@ -375,20 +389,65 @@
     }
   }
 
+  function initGUI() {
+    if (gui) gui.destroy()
+    
+    gui = new GUI({ title: '3D 모델 컨트롤' })
+    
+    // 모델 폴더
+    const modelFolder = gui.addFolder('모델 설정')
+    modelFolder.add(config, 'modelScale', 0.1, 2, 0.05).name('모델 크기').onChange(updateConfigBuffer)
+    modelFolder.add(config, 'rotationSpeed', 0, 5, 0.1).name('회전 속도').onChange(updateConfigBuffer)
+    modelFolder.add(config, 'wireframe').name('와이어프레임').onChange(handleWireframeChange)
+    
+    // 회전 폴더
+    const rotationFolder = gui.addFolder('회전 각도')
+    rotationFolder.add(config, 'rotateX', -Math.PI, Math.PI, 0.1).name('X축 회전').onChange(updateConfigBuffer)
+    rotationFolder.add(config, 'rotateY', -Math.PI, Math.PI, 0.1).name('Y축 회전').onChange(updateConfigBuffer)
+    rotationFolder.add(config, 'rotateZ', -Math.PI, Math.PI, 0.1).name('Z축 회전').onChange(updateConfigBuffer)
+    rotationFolder.add(config, 'resetRotation').name('회전 초기화')
+    
+    // 배경색 설정 - 단일 컬러 피커 사용
+    gui.addColor(config, 'backgroundColor').name('배경색').onChange(updateConfigBuffer)
+    
+    // GUI 위치 조정
+    gui.domElement.style.position = 'absolute'
+    gui.domElement.style.top = '10px'
+    gui.domElement.style.right = '10px'
+  }
+
+  function handleWireframeChange() {
+    // 와이어프레임 모드 변경 시 파이프라인 재생성
+    initWebGPU()
+  }
+
   function updateConfigBuffer() {
     if (!device || !configBuffer) return
     
+    // 헥스 색상 값을 RGB로 변환
+    const bgColor = hexToRgb(config.backgroundColor)
+    
     const configArray = new Float32Array([
-      modelScale,
-      rotationSpeed,
-      rotateX,
-      rotateY,
-      rotateZ,
-      wireframe ? 1.0 : 0.0,
+      config.modelScale,
+      config.rotationSpeed,
+      config.rotateX,
+      config.rotateY,
+      config.rotateZ,
+      config.wireframe ? 1.0 : 0.0,
       0, 0, 0, 0, 0, 0, 0 // padding (7개)
     ])
     
     device.queue.writeBuffer(configBuffer, 0, configArray)
+  }
+
+  // 헥스 컬러 코드를 RGB로 변환하는 함수
+  function hexToRgb(hex) {
+    // '#RRGGBB' 형식의 문자열에서 RGB 값 추출
+    const r = parseInt(hex.slice(1, 3), 16) / 255
+    const g = parseInt(hex.slice(3, 5), 16) / 255
+    const b = parseInt(hex.slice(5, 7), 16) / 255
+    
+    return { r, g, b }
   }
 
   function render(timestamp = 0) {
@@ -406,10 +465,18 @@
       usage: GPUTextureUsage.RENDER_ATTACHMENT
     })
 
+    // 헥스 색상 값을 RGB로 변환
+    const bgColor = hexToRgb(config.backgroundColor)
+
     const renderPassDescriptor = {
       label: 'Model Render Pass',
       colorAttachments: [{
-        clearValue: backgroundColor,
+        clearValue: {
+          r: bgColor.r,
+          g: bgColor.g,
+          b: bgColor.b,
+          a: 1.0
+        },
         loadOp: 'clear',
         storeOp: 'store',
         view: context.getCurrentTexture().createView(),
@@ -451,17 +518,6 @@
     animationFrameId = requestAnimationFrame(render)
   }
 
-  function handleConfigChange() {
-    if (pipeline && device) {
-      // 파이프라인 토폴로지 변경 필요 시 파이프라인 재생성
-      if (wireframe !== (pipeline.primitive.topology === 'line-list')) {
-        initWebGPU()
-      } else {
-        updateConfigBuffer()
-      }
-    }
-  }
-
   function updateCanvasSize() {
     if (canvasElement && context) {
       // 화면 크기에 맞게 캔버스 크기 조정
@@ -498,6 +554,10 @@
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
+      // GUI 정리
+      if (gui) {
+        gui.destroy()
+      }
       // 이벤트 리스너 제거
       window.removeEventListener('resize', updateCanvasSize)
     }
@@ -520,144 +580,12 @@
     </div>
   {/if}
   
-  <div class="layout">
-    <div class="canvas-container">
-      <canvas
-        bind:this={canvasElement}
-        width="800"
-        height="600"
-      />
-    </div>
-    
-    <div class="controls">
-      <h2>모델 설정</h2>
-      
-      <div class="control-group">
-        <label>
-          회전 속도:
-          <input 
-            type="range" 
-            min="0" 
-            max="5" 
-            step="0.1" 
-            bind:value={rotationSpeed} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{rotationSpeed.toFixed(1)}</span>
-        </label>
-      </div>
-      
-      <div class="control-group">
-        <label>
-          모델 크기:
-          <input 
-            type="range" 
-            min="0.1" 
-            max="2" 
-            step="0.05" 
-            bind:value={modelScale} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{modelScale.toFixed(2)}</span>
-        </label>
-      </div>
-      
-      <div class="control-group">
-        <h3>회전 각도</h3>
-        
-        <label>
-          X축 회전:
-          <input 
-            type="range" 
-            min="-3.14" 
-            max="3.14" 
-            step="0.1" 
-            bind:value={rotateX} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{rotateX.toFixed(1)}</span>
-        </label>
-        
-        <label>
-          Y축 회전:
-          <input 
-            type="range" 
-            min="-3.14" 
-            max="3.14" 
-            step="0.1" 
-            bind:value={rotateY} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{rotateY.toFixed(1)}</span>
-        </label>
-        
-        <label>
-          Z축 회전:
-          <input 
-            type="range" 
-            min="-3.14" 
-            max="3.14" 
-            step="0.1" 
-            bind:value={rotateZ} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{rotateZ.toFixed(1)}</span>
-        </label>
-      </div>
-      
-      <div class="control-group">
-        <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            bind:checked={wireframe} 
-            on:change={handleConfigChange}
-          />
-          와이어프레임 모드
-        </label>
-      </div>
-      
-      <div class="control-group">
-        <h3>배경색</h3>
-        <label>
-          Red:
-          <input 
-            type="range" 
-            min="0" 
-            max="1" 
-            step="0.01" 
-            bind:value={backgroundColor.r} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{backgroundColor.r.toFixed(2)}</span>
-        </label>
-        
-        <label>
-          Green:
-          <input 
-            type="range" 
-            min="0" 
-            max="1" 
-            step="0.01" 
-            bind:value={backgroundColor.g} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{backgroundColor.g.toFixed(2)}</span>
-        </label>
-        
-        <label>
-          Blue:
-          <input 
-            type="range" 
-            min="0" 
-            max="1" 
-            step="0.01" 
-            bind:value={backgroundColor.b} 
-            on:input={handleConfigChange}
-          />
-          <span class="value">{backgroundColor.b.toFixed(2)}</span>
-        </label>
-      </div>
-    </div>
+  <div class="canvas-container">
+    <canvas
+      bind:this={canvasElement}
+      width="800"
+      height="600"
+    />
   </div>
 </div>
 
@@ -666,18 +594,12 @@
     height: 100%;
     width: 100%;
     padding: 20px;
-  }
-
-  .layout {
-    display: flex;
-    flex-direction: row;
-    gap: 20px;
-    height: calc(80vh - 100px);
+    position: relative;
   }
 
   .canvas-container {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
+    height: calc(100vh - 100px);
   }
 
   canvas {
@@ -685,59 +607,13 @@
     background-color: #000;
     width: 100%;
     height: 100%;
-  }
-
-  .controls {
-    width: 300px;
-    padding: 15px;
-    background-color: #f5f5f5;
-    border-radius: 5px;
-    max-height: 100%;
-    overflow-y: auto;
-  }
-
-  .control-group {
-    margin-bottom: 20px;
-  }
-
-  h2 {
-    margin-top: 0;
-    margin-bottom: 15px;
-    font-size: 1.2rem;
-  }
-
-  h3 {
-    margin-top: 10px;
-    margin-bottom: 10px;
-    font-size: 1rem;
-  }
-
-  label {
     display: block;
-    margin-bottom: 10px;
-    font-size: 0.9rem;
   }
 
-  input[type="range"] {
-    width: 100%;
-    margin-top: 5px;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  input[type="checkbox"] {
-    margin: 0;
-  }
-
-  .value {
-    display: inline-block;
-    min-width: 40px;
-    text-align: right;
-    margin-left: 10px;
+  h1 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.5rem;
   }
 
   .error {
@@ -766,17 +642,8 @@
   }
 
   @media (max-width: 768px) {
-    .layout {
-      flex-direction: column;
-      height: auto;
-    }
-    
     .canvas-container {
-      height: 50vh;
-    }
-    
-    .controls {
-      width: 100%;
+      height: 70vh;
     }
   }
 </style> 
