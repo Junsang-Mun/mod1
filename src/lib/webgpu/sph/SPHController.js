@@ -1,4 +1,5 @@
 import { SPHModel } from './SPHModel.js'
+import sphShaderCode from './sph.wgsl'
 
 export class SPHController {
   constructor() {
@@ -18,7 +19,7 @@ export class SPHController {
     this.canvas = canvas
     
     try {
-      await this.model.initialize(canvas, config)
+      await this.model.initialize(canvas, config, sphShaderCode)
       this.setupEventListeners()
       this.startRenderLoop()
       this.isSimulationRunning = true
