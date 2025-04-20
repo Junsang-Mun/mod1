@@ -1,4 +1,4 @@
-import { WebGPUModel } from '../models/WebGPUModel.js'
+import { WebGPUModel } from './WebGPUModel.js'
 
 export class WebGPUController {
   constructor() {

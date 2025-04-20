@@ -1,6 +1,6 @@
 <script>
     import { onMount, onDestroy } from 'svelte'
-    import { WebGPUController } from './controllers/WebGPUController.js'
+    import { WebGPUController } from '$lib/webgpu'
     import shaderCode from './mouse_interaction.wgsl'
     import image from '$lib/texture.jpeg'
 
