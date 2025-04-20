@@ -25,7 +25,8 @@ export class WebGPUController {
   }
 
   setupEventListeners(canvas) {
-    canvas.addEventListener('mousemove', (event) => this.handleMouseMove(event, canvas))
+    this.mouseMoveListener = (event) => this.handleMouseMove(event, canvas);
+    canvas.addEventListener('mousemove', this.mouseMoveListener);
   }
 
   handleMouseMove(event, canvas) {
