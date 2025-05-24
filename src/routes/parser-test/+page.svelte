@@ -1,7 +1,7 @@
 <script>
-  import { parseMod1Content } from '$lib/parser/mod1Parser'
+  import { loadMod1ToJson } from '$lib/parser/mod1Parser'
 
-  let parsedData = null
+  let loadData = null
   let error = null
 
   async function handleFileUpload(event) {
@@ -10,12 +10,12 @@
 
     try {
       const content = await file.text()
-      parsedData = parseMod1Content(content, file.name)
-      console.log('parsedData', parsedData)
+      loadData = loadMod1ToJson(content, file.name)
+      console.log('parsedData', loadData)
       error = null
     } catch (err) {
       error = err.message
-      parsedData = null
+      loadData = null
     }
   }
 </script>
@@ -43,14 +43,14 @@
     </div>
   {/if}
 
-  {#if parsedData}
+  {#if loadData}
     <div class="bg-white shadow rounded-lg p-4">
       <h2 class="text-xl font-semibold mb-2">Parsed Results</h2>
       
       <div class="mb-4">
         <h3 class="font-medium">Metadata:</h3>
         <pre class="bg-gray-50 p-2 rounded">
-          {JSON.stringify(parsedData.metadata, null, 2)}
+          {JSON.stringify(loadData.metadata, null, 2)}
         </pre>
       </div>
 
@@ -67,7 +67,7 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              {#each parsedData.points.slice(0, 10) as point}
+              {#each loadData.points.slice(0, 10) as point}
                 <tr>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{point.lineIndex}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{point.x}</td>
@@ -78,9 +78,9 @@
             </tbody>
           </table>
         </div>
-        {#if parsedData.points.length > 10}
+        {#if loadData.points.length > 10}
           <p class="text-sm text-gray-500 mt-2">
-            Showing first 10 of {parsedData.points.length} points
+            Showing first 10 of {loadData.points.length} points
           </p>
         {/if}
       </div>

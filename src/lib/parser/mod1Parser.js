@@ -8,7 +8,7 @@
  * @param {string} filename - The name of the file
  * @returns {Object} Structured data containing points and metadata
  */
-export function parseMod1Content(content, filename) {
+function parseMod1Content(content, filename) {
   const lines = content.trim().split('\n')
   
   const result = {
@@ -48,7 +48,7 @@ export function parseMod1Content(content, filename) {
  * @param {Object} parsedData - The parsed data containing points and metadata
  * @returns {Object} Normalized data with bounds information
  */
-function normalizeContent(parsedData) {
+normalizeContent(parsedData) {
   const bounds = {
     min: { x: Infinity, y: Infinity, z: Infinity },
     max: { x: -Infinity, y: -Infinity, z: -Infinity }
