@@ -44,11 +44,11 @@ function parseMod1Content(content, filename) {
 }
 
 /**
- * Normalizes the parsed data coordinates to [0, 1] range
+ * Normalizes the parsed data coordinates using a unified maximum value
  * @param {Object} parsedData - The parsed data containing points and metadata
  * @returns {Object} Normalized data with bounds information
  */
-normalizeContent(parsedData) {
+function normalizeContent(parsedData) {
   const bounds = {
     min: { x: Infinity, y: Infinity, z: Infinity },
     max: { x: -Infinity, y: -Infinity, z: -Infinity }
@@ -64,11 +64,17 @@ normalizeContent(parsedData) {
     bounds.max.z = Math.max(bounds.max.z, point.z)
   })
 
-  // Second pass: normalize coordinates
+  // Calculate unified range
+  const rangeX = bounds.max.x - bounds.min.x
+  const rangeY = bounds.max.y - bounds.min.y
+  const rangeZ = bounds.max.z - bounds.min.z
+  const maxRange = Math.max(rangeX, rangeY, rangeZ)
+
+  // Second pass: normalize coordinates using unified range
   const normalizedPoints = parsedData.points.map(point => {
-    const normalizedX = (point.x - bounds.min.x) / (bounds.max.x - bounds.min.x)
-    const normalizedY = (point.y - bounds.min.y) / (bounds.max.y - bounds.min.y)
-    const normalizedZ = (point.z - bounds.min.z) / (bounds.max.z - bounds.min.z)
+    const normalizedX = (point.x - bounds.min.x) / maxRange
+    const normalizedY = (point.y - bounds.min.y) / maxRange
+    const normalizedZ = (point.z - bounds.min.z) / maxRange
 
     return {
       x: normalizedX,
@@ -85,7 +91,8 @@ normalizeContent(parsedData) {
     points: normalizedPoints,
     metadata: {
       ...parsedData.metadata,
-      bounds
+      bounds,
+      maxRange
     }
   }
 }
