@@ -50,25 +50,10 @@ export function parseMod1Content(filePath) {
  * @param {string} filePath - The path to the mod1 file
  * @returns {string} JSON string representation of the parsed data
  */
-export function mod1ToJson(filePath) {
+export function loadMod1ToJson(filePath) {
   try {
-    const jsonData = parseMod1Content(filePath)
-    return JSON.stringify(jsonData, null, 2)
+    return parseMod1Content(filePath)
   } catch (error) {
     throw new Error(`Error converting mod1 to JSON: ${error.message}`)
   }
-}
-
-/**
- * Parses a single coordinate group from mod1 format
- * @param {string} group - A coordinate group in format "(x,y,z)"
- * @returns {Object} Object containing x, y, z coordinates
- */
-export function parseCoordinateGroup(group) {
-  const [x, y, z] = group
-    .replace(/[()]/g, '')
-    .split(',')
-    .map(Number)
-  
-  return { x, y, z }
 }
