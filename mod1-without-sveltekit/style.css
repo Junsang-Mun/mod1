@@ -1,0 +1,39 @@
+body {
+    margin: 0;
+    background: #222; /* Dark background for contrast */
+    color: #eee;
+    font-family: sans-serif;
+    overflow: hidden; /* No scroll, the canvas is full-screen */
+}
+#toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+    color: #fff;
+    z-index: 10;
+    font-size: 14px;
+}
+#toolbar select,
+#toolbar button {
+    margin: 0 8px 0 4px;
+}
+#info {
+    margin-left: 16px;
+    font-size: 13px;
+    color: #ccc;
+}
+#gpu-canvas {
+    display: block;
+    margin: 0;
+    /* Position canvas below the toolbar */
+    position: absolute;
+    top: 32px; /* roughly toolbar height */
+    left: 0;
+    /* width: 100%; */
+    width: 800px;
+    height: 600px;
+    bottom: 0;
+}

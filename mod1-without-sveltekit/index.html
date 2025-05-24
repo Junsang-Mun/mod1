@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>WebGPU Water Flow Simulation</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <!-- Control toolbar for simulation modes and actions -->
+        <div id="toolbar">
+            <!-- mod1 file input input handler -->
+            <label for="mod1Input">Load .mod1 file:</label>
+            <input id="mod1Input" type="file" accept=".mod1" />
+            <!-- Mode selection: what left-click does -->
+            Mode:
+            <select id="modeSelect">
+                <option value="raise">Raise Terrain</option>
+                <option value="lower">Lower Terrain</option>
+                <option value="water" selected>Add Water</option>
+            </select>
+            <!-- Scenario selection: preset water addition modes -->
+            Scenario:
+            <select id="scenarioSelect">
+                <option value="manual" selected>Manual Control</option>
+                <option value="rain">Rain (slow flood)</option>
+                <option value="even">Even Rising Water</option>
+                <option value="wave">Wave from Left</option>
+            </select>
+            <!-- Reset button to clear water and restore initial terrain -->
+            <button id="resetBtn">Reset</button>
+            <!-- Instructions -->
+            <span id="info"
+                >Use left-click (per mode) on the terrain. Right-click and drag
+                to rotate camera.</span
+            >
+        </div>
+
+        <!-- Canvas for WebGPU rendering -->
+        <canvas id="gpu-canvas" width="800" height="600"></canvas>
+
+        <!-- Include the main JavaScript logic -->
+        <script src="main.js"></script>
+    </body>
+</html>
