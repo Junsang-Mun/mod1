@@ -89,23 +89,23 @@ async function init() {
   let cameraX = 0;
   let cameraY = 0;
   let cameraZ = -2;
+  let cameraRotation = 0;
+  let zoom = 1.0;
 
   function computeIsometricMVP() {
     const degToRad = (d) => (d * Math.PI) / 180;
-    const angleX = degToRad(35.264); // ~35.264° for isometric
-    const angleY = degToRad(45);
+    const angleX = degToRad(35.264);
+    const angleY = degToRad(45 + cameraRotation);
 
-    // Rotation X
     const cx = Math.cos(angleX),
       sx = Math.sin(angleX);
-    const rotX = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0, 0, 0, 0, 1];
-
-    // Rotation Y
     const cy = Math.cos(angleY),
       sy = Math.sin(angleY);
+
+    const rotX = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0, 0, 0, 0, 1];
+
     const rotY = [cy, 0, sy, 0, 0, 1, 0, 0, -sy, 0, cy, 0, 0, 0, 0, 1];
 
-    // Multiply rotX * rotY
     const view = new Float32Array(16);
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
@@ -116,17 +116,14 @@ async function init() {
           rotY[i + 12] * rotX[j * 4 + 3];
       }
     }
-
-    // Apply translation
     view[12] = cameraX;
     view[13] = cameraY;
     view[14] = cameraZ;
 
-    // Orthographic projection
-    const left = -1.5,
-      right = 1.5;
-    const bottom = -1.5,
-      top = 1.5;
+    const left = -1.5 / zoom,
+      right = 1.5 / zoom;
+    const bottom = -1.5 / zoom,
+      top = 1.5 / zoom;
     const near = -10,
       far = 10;
 
@@ -149,7 +146,6 @@ async function init() {
       1,
     ]);
 
-    // Final MVP = ortho * view
     const mvp = new Float32Array(16);
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
@@ -160,7 +156,6 @@ async function init() {
           ortho[i + 12] * view[j * 4 + 3];
       }
     }
-
     return mvp;
   }
 
@@ -171,10 +166,9 @@ async function init() {
     const text = await file.text();
     const { points } = loadMod1ToJson(text, file.name);
 
-    const SIZE = 0.02;
+    const SIZE = 0.01;
     const vertices = [];
 
-    // Cube vertex offsets
     const cube = [
       [-1, -1, -1],
       [1, -1, -1],
@@ -186,7 +180,6 @@ async function init() {
       [-1, 1, 1],
     ];
 
-    // Cube faces as triangles (each face = 2 triangles)
     const faces = [
       [0, 1, 2],
       [0, 2, 3],
@@ -230,15 +223,18 @@ async function init() {
     device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
   });
 
-  // Keyboard camera control
   window.addEventListener("keydown", (e) => {
     const step = 0.05;
+    const rotateStep = 5; // degrees
+    const zoomFactor = 0.1;
     if (e.key === "ArrowUp") cameraY += step;
     else if (e.key === "ArrowDown") cameraY -= step;
     else if (e.key === "ArrowLeft") cameraX -= step;
     else if (e.key === "ArrowRight") cameraX += step;
-    else if (e.key === "q") cameraZ += step;
-    else if (e.key === "e") cameraZ -= step;
+    else if (e.key === "w") zoom *= 1 - zoomFactor;
+    else if (e.key === "s") zoom *= 1 + zoomFactor;
+    else if (e.key === "q") cameraRotation -= rotateStep;
+    else if (e.key === "e") cameraRotation += rotateStep;
 
     const mvpMatrix = computeIsometricMVP();
     device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
