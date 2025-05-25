@@ -92,6 +92,17 @@ async function init() {
   let cameraRotation = 0;
   let zoom = 1.0;
 
+  /**
+   * Computes the Model-View-Projection (MVP) matrix for an isometric view.
+   * 
+   * The isometric view is achieved by rotating the scene:
+   * - Around the X-axis by 35.264° to simulate the isometric angle.
+   * - Around the Y-axis by 45° plus an optional camera rotation.
+   * 
+   * The function combines two rotation matrices (`rotX` and `rotY`) to create
+   * a view matrix. This matrix is used to transform 3D coordinates into the
+   * isometric perspective.
+   */
   function computeIsometricMVP() {
     const degToRad = (d) => (d * Math.PI) / 180;
     const angleX = degToRad(35.264);
