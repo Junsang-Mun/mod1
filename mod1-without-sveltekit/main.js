@@ -19,22 +19,49 @@ async function init() {
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({ device, format, alphaMode: "opaque" });
 
-  const redBoxShader = await fetch("render.wgsl").then((r) => r.text());
-  const shaderModule = device.createShaderModule({ code: redBoxShader });
+  const shaderSource = await fetch("render.wgsl").then((r) => r.text());
+  const shaderModule = device.createShaderModule({ code: shaderSource });
+
+  const mvpBuffer = device.createBuffer({
+    size: 64,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  const bindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX,
+        buffer: {},
+      },
+    ],
+  });
+
+  const bindGroup = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      {
+        binding: 0,
+        resource: { buffer: mvpBuffer },
+      },
+    ],
+  });
 
   const pipeline = device.createRenderPipeline({
-    layout: "auto",
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
     vertex: {
       module: shaderModule,
       entryPoint: "vs_main",
       buffers: [
         {
-          arrayStride: 8,
+          arrayStride: 12,
           attributes: [
             {
               shaderLocation: 0,
               offset: 0,
-              format: "float32x2",
+              format: "float32x3",
             },
           ],
         },
@@ -47,12 +74,95 @@ async function init() {
     },
     primitive: {
       topology: "triangle-list",
-      cullMode: "none",
+      cullMode: "back",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
     },
   });
 
   let vertexBuffer = null;
   let numVertices = 0;
+
+  let cameraX = 0;
+  let cameraY = 0;
+  let cameraZ = -2;
+
+  function computeIsometricMVP() {
+    const degToRad = (d) => (d * Math.PI) / 180;
+    const angleX = degToRad(35.264); // ~35.264° for isometric
+    const angleY = degToRad(45);
+
+    // Rotation X
+    const cx = Math.cos(angleX),
+      sx = Math.sin(angleX);
+    const rotX = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0, 0, 0, 0, 1];
+
+    // Rotation Y
+    const cy = Math.cos(angleY),
+      sy = Math.sin(angleY);
+    const rotY = [cy, 0, sy, 0, 0, 1, 0, 0, -sy, 0, cy, 0, 0, 0, 0, 1];
+
+    // Multiply rotX * rotY
+    const view = new Float32Array(16);
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        view[j * 4 + i] =
+          rotY[i] * rotX[j * 4 + 0] +
+          rotY[i + 4] * rotX[j * 4 + 1] +
+          rotY[i + 8] * rotX[j * 4 + 2] +
+          rotY[i + 12] * rotX[j * 4 + 3];
+      }
+    }
+
+    // Apply translation
+    view[12] = cameraX;
+    view[13] = cameraY;
+    view[14] = cameraZ;
+
+    // Orthographic projection
+    const left = -1.5,
+      right = 1.5;
+    const bottom = -1.5,
+      top = 1.5;
+    const near = -10,
+      far = 10;
+
+    const ortho = new Float32Array([
+      2 / (right - left),
+      0,
+      0,
+      0,
+      0,
+      2 / (top - bottom),
+      0,
+      0,
+      0,
+      0,
+      -2 / (far - near),
+      0,
+      -(right + left) / (right - left),
+      -(top + bottom) / (top - bottom),
+      -(far + near) / (far - near),
+      1,
+    ]);
+
+    // Final MVP = ortho * view
+    const mvp = new Float32Array(16);
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        mvp[j * 4 + i] =
+          ortho[i] * view[j * 4 + 0] +
+          ortho[i + 4] * view[j * 4 + 1] +
+          ortho[i + 8] * view[j * 4 + 2] +
+          ortho[i + 12] * view[j * 4 + 3];
+      }
+    }
+
+    return mvp;
+  }
 
   mod1Input.addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -61,35 +171,51 @@ async function init() {
     const text = await file.text();
     const { points } = loadMod1ToJson(text, file.name);
 
-    const SIZE = 20; // box size in pixels
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-
-    // Create red box vertices for each point
+    const SIZE = 0.02;
     const vertices = [];
+
+    // Cube vertex offsets
+    const cube = [
+      [-1, -1, -1],
+      [1, -1, -1],
+      [1, 1, -1],
+      [-1, 1, -1],
+      [-1, -1, 1],
+      [1, -1, 1],
+      [1, 1, 1],
+      [-1, 1, 1],
+    ];
+
+    // Cube faces as triangles (each face = 2 triangles)
+    const faces = [
+      [0, 1, 2],
+      [0, 2, 3],
+      [4, 5, 6],
+      [4, 6, 7],
+      [0, 1, 5],
+      [0, 5, 4],
+      [2, 3, 7],
+      [2, 7, 6],
+      [1, 2, 6],
+      [1, 6, 5],
+      [0, 3, 7],
+      [0, 7, 4],
+    ];
+
     for (const p of points) {
-      const cx = p.x * canvasWidth;
-      const cy = p.y * canvasHeight;
-
-      // Box corners (two triangles)
-      vertices.push(
-        cx - SIZE / 2,
-        cy - SIZE / 2,
-        cx + SIZE / 2,
-        cy - SIZE / 2,
-        cx + SIZE / 2,
-        cy + SIZE / 2,
-
-        cx - SIZE / 2,
-        cy - SIZE / 2,
-        cx + SIZE / 2,
-        cy + SIZE / 2,
-        cx - SIZE / 2,
-        cy + SIZE / 2,
-      );
+      const base = [p.x, p.y, p.z];
+      for (const face of faces) {
+        for (const i of face) {
+          vertices.push(
+            base[0] + SIZE * cube[i][0],
+            base[1] + SIZE * cube[i][1],
+            base[2] + SIZE * cube[i][2],
+          );
+        }
+      }
     }
 
-    numVertices = vertices.length / 2;
+    numVertices = vertices.length / 3;
 
     const vertexData = new Float32Array(vertices);
     vertexBuffer = device.createBuffer({
@@ -99,6 +225,23 @@ async function init() {
     });
     new Float32Array(vertexBuffer.getMappedRange()).set(vertexData);
     vertexBuffer.unmap();
+
+    const mvpMatrix = computeIsometricMVP();
+    device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
+  });
+
+  // Keyboard camera control
+  window.addEventListener("keydown", (e) => {
+    const step = 0.05;
+    if (e.key === "ArrowUp") cameraY += step;
+    else if (e.key === "ArrowDown") cameraY -= step;
+    else if (e.key === "ArrowLeft") cameraX -= step;
+    else if (e.key === "ArrowRight") cameraX += step;
+    else if (e.key === "q") cameraZ += step;
+    else if (e.key === "e") cameraZ -= step;
+
+    const mvpMatrix = computeIsometricMVP();
+    device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
   });
 
   function frame() {
@@ -117,9 +260,22 @@ async function init() {
           storeOp: "store",
         },
       ],
+      depthStencilAttachment: {
+        view: device
+          .createTexture({
+            size: [canvas.width, canvas.height],
+            format: "depth24plus",
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          })
+          .createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+      },
     });
 
     pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, vertexBuffer);
     pass.draw(numVertices, 1, 0, 0);
     pass.end();
