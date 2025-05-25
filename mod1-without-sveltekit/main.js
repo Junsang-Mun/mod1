@@ -1,6 +1,6 @@
 // main.js
+import { loadMod1ToJson } from "./mod1Parser.js";
 
-// Wait for the HTML to be parsed so all IDs exist
 window.addEventListener("DOMContentLoaded", () => {
   init().catch((err) => console.error("Initialization error:", err));
 });
@@ -12,9 +12,8 @@ async function init() {
   const scenarioSelect = document.getElementById("scenarioSelect");
   const resetButton = document.getElementById("resetBtn");
   const mod1Input = document.getElementById("mod1Input");
-
   if (!canvas || !modeSelect || !scenarioSelect || !resetButton || !mod1Input) {
-    throw new Error("❌ One or more required DOM elements not found!");
+    throw new Error("❌ Required DOM elements not found");
   }
 
   // ---- Simulation parameters ----
@@ -33,8 +32,8 @@ async function init() {
   const target = { x: (WIDTH - 1) / 2, y: 0, z: (HEIGHT - 1) / 2 };
 
   // ---- Mode & scenario ----
-  let currentMode = modeSelect.value;
-  let currentScenario = scenarioSelect.value;
+  let currentMode = modeSelect.value; // "raise","lower","water"
+  let currentScenario = scenarioSelect.value; // "manual","rain","even","wave"
   let waveTriggered = false;
 
   // ---- CPU arrays ----
@@ -44,11 +43,11 @@ async function init() {
   const flowYData = new Float32Array(WIDTH * (HEIGHT + 1));
 
   // initial radial hill
-  for (let y = 0; y < HEIGHT; y++) {
-    for (let x = 0; x < WIDTH; x++) {
+  for (let y = 0; y < HEIGHT; ++y) {
+    for (let x = 0; x < WIDTH; ++x) {
       const dx = x - (WIDTH - 1) / 2,
-        dy = y - (HEIGHT - 1) / 2;
-      const d2 = dx * dx + dy * dy;
+        dy = y - (HEIGHT - 1) / 2,
+        d2 = dx * dx + dy * dy;
       let h = 10 * Math.exp(-d2 / (2 * (WIDTH / 4) * (HEIGHT / 4)));
       if (x === 0 || y === 0 || x === WIDTH - 1 || y === HEIGHT - 1) h = 0;
       terrainHeight[y * WIDTH + x] = h;
@@ -71,7 +70,7 @@ async function init() {
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({ device, format, alphaMode: "opaque" });
 
-  // ---- load WGSL shaders ----
+  // ---- Load WGSL shaders ----
   let simSource, renderSource;
   try {
     const [sR, rR] = await Promise.all([
@@ -79,7 +78,7 @@ async function init() {
       fetch("render.wgsl"),
     ]);
     if (!sR.ok || !rR.ok)
-      throw new Error(`Failed to load shaders: ${sR.status},${rR.status}`);
+      throw new Error(`Shader load failed: ${sR.status},${rR.status}`);
     simSource = await sR.text();
     renderSource = await rR.text();
   } catch (e) {
@@ -89,7 +88,7 @@ async function init() {
   const simulationModule = device.createShaderModule({ code: simSource });
   const renderModule = device.createShaderModule({ code: renderSource });
 
-  // ---- create GPU buffers ----
+  // ---- Create GPU buffers ----
   const USAGE_S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
   const USAGE_U = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 
@@ -128,10 +127,10 @@ async function init() {
   const uniformBuffer_sim = device.createBuffer({ size: 48, usage: USAGE_U });
   const uniformBuffer_rnd = device.createBuffer({ size: 80, usage: USAGE_U });
 
-  // index buffer
+  // ---- Index buffer ----
   const idxs = [];
-  for (let y = 0; y < HEIGHT - 1; y++) {
-    for (let x = 0; x < WIDTH - 1; x++) {
+  for (let y = 0; y < HEIGHT - 1; ++y) {
+    for (let x = 0; x < WIDTH - 1; ++x) {
       const i = y * WIDTH + x,
         tl = i,
         tr = i + 1,
@@ -149,7 +148,7 @@ async function init() {
   new Uint32Array(indexBuffer.getMappedRange()).set(indexData);
   indexBuffer.unmap();
 
-  // ---- bind layouts & pipelines ----
+  // ---- Bind layouts & pipelines ----
   const computeBindLayout = device.createBindGroupLayout({
     entries: [
       {
@@ -273,14 +272,16 @@ async function init() {
     },
   });
 
-  // ---- depth buffer helper ----
+  // ---- Depth texture helper ----
   let depthTexture = null;
   function ensureDepthTexture() {
     const w = canvas.clientWidth,
       h = canvas.clientHeight;
-    const needsRecreate =
-      !depthTexture || depthTexture.width !== w || depthTexture.height !== h;
-    if (needsRecreate) {
+    if (
+      !depthTexture ||
+      depthTexture.width !== w ||
+      depthTexture.height !== h
+    ) {
       depthTexture = device.createTexture({
         size: { width: w, height: h, depthOrArrayLayers: 1 },
         format: "depth24plus",
@@ -290,7 +291,7 @@ async function init() {
     return depthTexture.createView();
   }
 
-  // ---- bind groups ----
+  // ---- Bind groups ----
   const bindGroup_compute = device.createBindGroup({
     layout: computeBindLayout,
     entries: [
@@ -310,20 +311,20 @@ async function init() {
     ],
   });
 
-  // ---- uniform ArrayBuffers ----
+  // ---- Uniform data ----
   const uniformData_sim = new ArrayBuffer(48);
   const simF32 = new Float32Array(uniformData_sim);
   const simU32 = new Uint32Array(uniformData_sim);
   simU32[0] = WIDTH;
   simU32[1] = HEIGHT;
-  const uniformData_rend = new ArrayBuffer(80);
-  const renF32 = new Float32Array(uniformData_rend);
+  const uniformData_rnd = new ArrayBuffer(80);
+  const renF32 = new Float32Array(uniformData_rnd);
 
   // ---- UI events ----
   modeSelect.addEventListener("change", () => (currentMode = modeSelect.value));
   scenarioSelect.addEventListener("change", () => {
-    if ((currentScenario = scenarioSelect.value) !== "wave")
-      waveTriggered = false;
+    currentScenario = scenarioSelect.value;
+    if (currentScenario !== "wave") waveTriggered = false;
   });
   resetButton.addEventListener("click", () => {
     waterHeight.fill(0);
@@ -337,41 +338,54 @@ async function init() {
     waveTriggered = false;
   });
 
-  // ---- .mod1 loader ----
+  // ---- .mod1 loader & remap to grid ----
   mod1Input.addEventListener("change", async (e) => {
-    const f = e.target.files[0];
-    if (!f) return console.warn("No .mod1 selected");
-    const text = await f.text();
-    console.log("🗒 Loaded .mod1:\n", text);
-    const points = text
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => {
-        const [x, y, z] = line.match(/-?\d+(\.\d+)?/g).map(Number);
-        return { x, y, z };
-      });
-    console.log("🔢 Points:", points);
+    const file = e.target.files[0];
+    if (!file) return;
 
-    // simple nearest‐point interpolation
-    for (let j = 0; j < HEIGHT; j++) {
-      for (let i = 0; i < WIDTH; i++) {
-        let best = points[0],
-          bd2 = (i - best.x) ** 2 + (j - best.y) ** 2;
-        for (const p of points) {
-          const d2 = (i - p.x) ** 2 + (j - p.y) ** 2;
-          if (d2 < bd2) {
-            bd2 = d2;
-            best = p;
-          }
-        }
-        terrainHeight[j * WIDTH + i] = best.z;
-      }
-    }
-    console.log("🎚 terrain[30..34]:", terrainHeight.slice(30, 35));
+    const text = await file.text();
+    const { points, metadata } = loadMod1ToJson(text, file.name);
+
+    // Map real-world coords into [0,WIDTH-1]×[0,HEIGHT-1]
+    const ptsGrid = points.map((p) => ({
+      x: ((p.x - metadata.bounds.min.x) / metadata.maxRange) * (WIDTH - 1),
+      y: ((p.y - metadata.bounds.min.y) / metadata.maxRange) * (HEIGHT - 1),
+    }));
+
+    console.log("mapped grid points:", ptsGrid);
+    interpolateTerrain(ptsGrid);
+
+    console.log(
+      "After interp → min:",
+      Math.min(...terrainHeight),
+      "max:",
+      Math.max(...terrainHeight),
+    );
+
     device.queue.writeBuffer(terrainBuffer, 0, terrainHeight);
   });
 
-  // ---- camera helper ----
+  // ---- interpolateTerrain (Gaussian bumps) ----
+  function interpolateTerrain(points2D) {
+    const H = 20.0;
+    const sigma = Math.max(WIDTH, HEIGHT) / 4;
+    const twoSigma2 = 2 * sigma * sigma;
+
+    terrainHeight.fill(0);
+    for (let j = 0; j < HEIGHT; ++j) {
+      for (let i = 0; i < WIDTH; ++i) {
+        let h = 0;
+        for (const p of points2D) {
+          const dx = i - p.x,
+            dy = j - p.y;
+          h += H * Math.exp(-(dx * dx + dy * dy) / twoSigma2);
+        }
+        terrainHeight[j * WIDTH + i] = h;
+      }
+    }
+  }
+
+  // ---- camera update ----
   function updateCameraMatrix() {
     const ex = target.x + camDistance * Math.cos(camPitch) * Math.sin(camYaw);
     const ey = target.y + camDistance * Math.sin(camPitch);
@@ -400,6 +414,7 @@ async function init() {
       uy = fz * rx - fx * rz,
       uz = fx * ry - fy * rx;
 
+    // view matrix
     const view = new Float32Array([
       rx,
       ux,
@@ -419,17 +434,18 @@ async function init() {
       1,
     ]);
 
+    // proj matrix
     const fov = Math.PI / 4,
-      aspect = canvas.clientWidth / canvas.clientHeight,
-      fval = 1 / Math.tan(fov / 2),
+      aspect = canvas.clientWidth / canvas.clientHeight;
+    const f = 1 / Math.tan(fov / 2),
       nf = 1 / (0.1 - 1000);
     const proj = new Float32Array([
-      fval / aspect,
+      f / aspect,
       0,
       0,
       0,
       0,
-      fval,
+      f,
       0,
       0,
       0,
@@ -442,6 +458,7 @@ async function init() {
       0,
     ]);
 
+    // mvp = proj * view
     const mvp = new Float32Array(16);
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
@@ -457,7 +474,7 @@ async function init() {
     renF32[17] = HEIGHT;
   }
 
-  // ---- pickCell with defined upx/upy/upz ----
+  // ---- pickCell for editing ----
   function pickCell(ndcX, ndcY) {
     const ex = target.x + camDistance * Math.cos(camPitch) * Math.sin(camYaw);
     const ey = target.y + camDistance * Math.sin(camPitch);
@@ -486,7 +503,7 @@ async function init() {
       uy = fz * rx - fx * rz,
       uz = fx * ry - fy * rx;
 
-    // camera‐space ray
+    // NDC → camera ray
     const fov = Math.PI / 4,
       aspect = canvas.clientWidth / canvas.clientHeight;
     const tanF = Math.tan(fov / 2);
@@ -498,26 +515,80 @@ async function init() {
     cy /= cl;
     cz /= cl;
 
-    // transform to world
+    // world ray
     const rdx = cx * rx + cy * ux + cz * fx;
     const rdy = cx * ry + cy * uy + cz * fy;
     const rdz = cx * rz + cy * uz + cz * fz;
-
     if (rdy === 0) return null;
     const t = -(ey - target.y) / rdy;
     if (t < 0) return null;
-
-    const wx = ex + t * rdx;
-    const wz = ez + t * rdz;
+    const wx = ex + t * rdx,
+      wz = ez + t * rdz;
     const ix = Math.floor(wx + 0.5),
       iz = Math.floor(wz + 0.5);
     if (ix < 0 || ix >= WIDTH || iz < 0 || iz >= HEIGHT) return null;
     return { x: ix, y: iz };
   }
 
-  // ---- main loop ----
+  // ---- Mouse controls for terrain editing & camera ----
+  let isDrag = false,
+    lastX = 0,
+    lastY = 0;
+  canvas.addEventListener("mousedown", (e) => {
+    if (e.button === 0) {
+      const rect = canvas.getBoundingClientRect();
+      const ndcX = ((e.clientX - rect.left) / canvas.clientWidth) * 2 - 1;
+      const ndcY = -(((e.clientY - rect.top) / canvas.clientHeight) * 2 - 1);
+      const cell = pickCell(ndcX, ndcY);
+      if (cell) {
+        const idx = cell.y * WIDTH + cell.x;
+        if (currentMode === "raise") {
+          terrainHeight[idx] += 1;
+          device.queue.writeBuffer(
+            terrainBuffer,
+            idx * 4,
+            new Float32Array([terrainHeight[idx]]),
+          );
+        } else if (currentMode === "lower") {
+          terrainHeight[idx] = Math.max(0, terrainHeight[idx] - 1);
+          device.queue.writeBuffer(
+            terrainBuffer,
+            idx * 4,
+            new Float32Array([terrainHeight[idx]]),
+          );
+        } else if (currentMode === "water") {
+          waterHeight[idx] += 1;
+          device.queue.writeBuffer(
+            waterBuffer,
+            idx * 4,
+            new Float32Array([waterHeight[idx]]),
+          );
+        }
+      }
+    } else if (e.button === 2) {
+      isDrag = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    }
+  });
+  canvas.addEventListener("mousemove", (e) => {
+    if (!isDrag) return;
+    const dx = e.clientX - lastX,
+      dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    camYaw -= dx * 0.005;
+    camPitch -= dy * 0.005;
+    camPitch = Math.max(-1.5, Math.min(1.5, camPitch));
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (e.button === 2) isDrag = false;
+  });
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  // ---- Main render loop ----
   function frame() {
-    // sim uniforms
+    // --- Compute pass uniforms ---
     const dt = 0.016;
     simF32[4] = dt;
     simF32[5] = GRAVITY;
@@ -537,16 +608,17 @@ async function init() {
     simF32[11] = 0;
     device.queue.writeBuffer(uniformBuffer_sim, 0, uniformData_sim);
 
-    // camera uniforms
+    // --- Camera uniforms ---
     updateCameraMatrix();
-    device.queue.writeBuffer(uniformBuffer_rnd, 0, uniformData_rend);
+    device.queue.writeBuffer(uniformBuffer_rnd, 0, uniformData_rnd);
 
-    // attachments
+    // --- Acquire attachments ---
     const colorView = context.getCurrentTexture().createView();
     const depthView = ensureDepthTexture();
 
     const cmd = device.createCommandEncoder();
-    // compute pass
+
+    // Compute pass
     const cpass = cmd.beginComputePass();
     cpass.setBindGroup(0, bindGroup_compute);
     cpass.setPipeline(computePipeline_addWater);
@@ -572,7 +644,7 @@ async function init() {
     cpass.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16));
     cpass.end();
 
-    // render pass
+    // Render pass
     const rpass = cmd.beginRenderPass({
       colorAttachments: [
         {
