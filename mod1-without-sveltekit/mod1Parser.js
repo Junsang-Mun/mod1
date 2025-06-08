@@ -72,9 +72,9 @@ function normalizeContent(parsedData) {
 
   // Second pass: normalize coordinates using unified range
   const normalizedPoints = parsedData.points.map(point => {
-    const normalizedX = (point.x - bounds.min.x) / maxRange
-    const normalizedY = (point.y - bounds.min.y) / maxRange
-    const normalizedZ = (point.z - bounds.min.z) / maxRange
+    const normalizedX = maxRange == 0 ? 0 : (point.x - bounds.min.x) / maxRange
+    const normalizedY = maxRange == 0 ? 0 : (point.y - bounds.min.y) / maxRange
+    const normalizedZ = maxRange == 0 ? 0 : (point.z - bounds.min.z) / maxRange
 
     return {
       x: normalizedX,
