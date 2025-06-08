@@ -20,6 +20,11 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main() -> @location(0) vec4<f32> {
-  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+fn fs_main_wireframe() -> @location(0) vec4<f32> {
+  return vec4<f32>(1.0, 1.0, 1.0, 1.0); // 흰색 와이어프레임
+}
+
+@fragment
+fn fs_main_face() -> @location(0) vec4<f32> {
+  return vec4<f32>(0.3, 0.6, 0.9, 1.0); // 파란색 바닥면
 }

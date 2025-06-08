@@ -47,7 +47,8 @@ async function init() {
     ],
   });
 
-  const pipeline = device.createRenderPipeline({
+  // 와이어프레임용 파이프라인
+  const wireframePipeline = device.createRenderPipeline({
     layout: device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout],
     }),
@@ -69,7 +70,7 @@ async function init() {
     },
     fragment: {
       module: shaderModule,
-      entryPoint: "fs_main",
+      entryPoint: "fs_main_wireframe",
       targets: [{ format }],
     },
     primitive: {
@@ -83,8 +84,47 @@ async function init() {
     },
   });
 
-  let vertexBuffer = null;
-  let numVertices = 0;
+  // 면 렌더링용 파이프라인
+  const facePipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_face",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "triangle-list",
+      cullMode: "none",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
+  let wireframeVertexBuffer = null;
+  let numWireframeVertices = 0;
+  let bottomFaceVertexBuffer = null;
+  let numBottomFaceVertices = 0;
 
   let cameraX = 0;
   let cameraY = 0;
@@ -179,17 +219,18 @@ async function init() {
     console.log('points', points)
 
     const SIZE = 1;
-    const vertices = [];
+    const wireframeVertices = [];
+    const bottomFaceVertices = [];
 
     const cube = [
-      [-1, -1, -1],
-      [1, -1, -1],
-      [1, 1, -1],
-      [-1, 1, -1],
-      [-1, -1, 1],
-      [1, -1, 1],
-      [1, 1, 1],
-      [-1, 1, 1],
+      [-1, -1, -1],  // 0: 아래 면 왼쪽 뒤
+      [1, -1, -1],   // 1: 아래 면 오른쪽 뒤
+      [1, 1, -1],    // 2: 아래 면 오른쪽 앞
+      [-1, 1, -1],   // 3: 아래 면 왼쪽 앞
+      [-1, -1, 1],   // 4: 위 면 왼쪽 뒤
+      [1, -1, 1],    // 5: 위 면 오른쪽 뒤
+      [1, 1, 1],     // 6: 위 면 오른쪽 앞
+      [-1, 1, 1],    // 7: 위 면 왼쪽 앞
     ];
 
     const edges = [
@@ -201,11 +242,11 @@ async function init() {
       [0, 4], [1, 5], [2, 6], [3, 7],
     ];
 
-    // 하나의 큰 와이어프레임 큐브 생성 (중심점 0, 0, 0)
+    // 와이어프레임 큐브 생성
     const base = [0, 0, 0];
     for (const edge of edges) {
       for (const i of edge) {
-        vertices.push(
+        wireframeVertices.push(
           base[0] + SIZE * cube[i][0],
           base[1] + SIZE * cube[i][1],
           base[2] + SIZE * cube[i][2],
@@ -213,16 +254,42 @@ async function init() {
       }
     }
 
-    numVertices = vertices.length / 3;
+    // 바닥면 삼각형 생성 (아래 면: z = -1)
+    // 첫 번째 삼각형: 0, 1, 2
+    bottomFaceVertices.push(
+      base[0] + SIZE * cube[0][0], base[1] + SIZE * cube[0][1], base[2] + SIZE * cube[0][2], // 0
+      base[0] + SIZE * cube[1][0], base[1] + SIZE * cube[1][1], base[2] + SIZE * cube[1][2], // 1
+      base[0] + SIZE * cube[2][0], base[1] + SIZE * cube[2][1], base[2] + SIZE * cube[2][2]  // 2
+    );
+    // 두 번째 삼각형: 0, 2, 3
+    bottomFaceVertices.push(
+      base[0] + SIZE * cube[0][0], base[1] + SIZE * cube[0][1], base[2] + SIZE * cube[0][2], // 0
+      base[0] + SIZE * cube[2][0], base[1] + SIZE * cube[2][1], base[2] + SIZE * cube[2][2], // 2
+      base[0] + SIZE * cube[3][0], base[1] + SIZE * cube[3][1], base[2] + SIZE * cube[3][2]  // 3
+    );
 
-    const vertexData = new Float32Array(vertices);
-    vertexBuffer = device.createBuffer({
-      size: vertexData.byteLength,
+    numWireframeVertices = wireframeVertices.length / 3;
+    numBottomFaceVertices = bottomFaceVertices.length / 3;
+
+    // 와이어프레임 버텍스 버퍼 생성
+    const wireframeData = new Float32Array(wireframeVertices);
+    wireframeVertexBuffer = device.createBuffer({
+      size: wireframeData.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
-    new Float32Array(vertexBuffer.getMappedRange()).set(vertexData);
-    vertexBuffer.unmap();
+    new Float32Array(wireframeVertexBuffer.getMappedRange()).set(wireframeData);
+    wireframeVertexBuffer.unmap();
+
+    // 바닥면 버텍스 버퍼 생성
+    const bottomFaceData = new Float32Array(bottomFaceVertices);
+    bottomFaceVertexBuffer = device.createBuffer({
+      size: bottomFaceData.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Float32Array(bottomFaceVertexBuffer.getMappedRange()).set(bottomFaceData);
+    bottomFaceVertexBuffer.unmap();
 
     const mvpMatrix = computeIsometricMVP();
     device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
@@ -246,7 +313,7 @@ async function init() {
   });
 
   function frame() {
-    if (!vertexBuffer) {
+    if (!wireframeVertexBuffer || !bottomFaceVertexBuffer) {
       requestAnimationFrame(frame);
       return;
     }
@@ -275,10 +342,18 @@ async function init() {
       },
     });
 
-    pass.setPipeline(pipeline);
+    // 바닥면 렌더링 (먼저 그려서 뒤에 위치)
+    pass.setPipeline(facePipeline);
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, vertexBuffer);
-    pass.draw(numVertices, 1, 0, 0);
+    pass.setVertexBuffer(0, bottomFaceVertexBuffer);
+    pass.draw(numBottomFaceVertices, 1, 0, 0);
+
+    // 와이어프레임 렌더링 (위에 그려서 앞에 위치)
+    pass.setPipeline(wireframePipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, wireframeVertexBuffer);
+    pass.draw(numWireframeVertices, 1, 0, 0);
+
     pass.end();
 
     device.queue.submit([encoder.finish()]);
