@@ -73,8 +73,8 @@ async function init() {
       targets: [{ format }],
     },
     primitive: {
-      topology: "triangle-list",
-      cullMode: "back",
+      topology: "line-list",
+      cullMode: "none",
     },
     depthStencil: {
       format: "depth24plus",
@@ -176,8 +176,9 @@ async function init() {
 
     const text = await file.text();
     const { points } = loadMod1ToJson(text, file.name);
+    console.log('points', points)
 
-    const SIZE = 0.01;
+    const SIZE = 1;
     const vertices = [];
 
     const cube = [
@@ -191,31 +192,24 @@ async function init() {
       [-1, 1, 1],
     ];
 
-    const faces = [
-      [0, 1, 2],
-      [0, 2, 3],
-      [4, 5, 6],
-      [4, 6, 7],
-      [0, 1, 5],
-      [0, 5, 4],
-      [2, 3, 7],
-      [2, 7, 6],
-      [1, 2, 6],
-      [1, 6, 5],
-      [0, 3, 7],
-      [0, 7, 4],
+    const edges = [
+      // 아래 면의 4개 모서리
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      // 위 면의 4개 모서리  
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      // 세로 4개 모서리
+      [0, 4], [1, 5], [2, 6], [3, 7],
     ];
 
-    for (const p of points) {
-      const base = [p.x, p.y, p.z];
-      for (const face of faces) {
-        for (const i of face) {
-          vertices.push(
-            base[0] + SIZE * cube[i][0],
-            base[1] + SIZE * cube[i][1],
-            base[2] + SIZE * cube[i][2],
-          );
-        }
+    // 하나의 큰 와이어프레임 큐브 생성 (중심점 0, 0, 0)
+    const base = [0, 0, 0];
+    for (const edge of edges) {
+      for (const i of edge) {
+        vertices.push(
+          base[0] + SIZE * cube[i][0],
+          base[1] + SIZE * cube[i][1],
+          base[2] + SIZE * cube[i][2],
+        );
       }
     }
 
