@@ -44,7 +44,7 @@ function parseMod1Content(content, filename) {
 }
 
 /**
- * Normalizes the parsed data coordinates using a unified maximum value
+ * Normalizes the parsed data coordinates to -1~1 range using a unified maximum value
  * @param {Object} parsedData - The parsed data containing points and metadata
  * @returns {Object} Normalized data with bounds information
  */
@@ -70,11 +70,11 @@ function normalizeContent(parsedData) {
   const rangeZ = bounds.max.z - bounds.min.z
   const maxRange = Math.max(rangeX, rangeY, rangeZ)
 
-  // Second pass: normalize coordinates using unified range
+  // Second pass: normalize coordinates to -1~1 range using unified range
   const normalizedPoints = parsedData.points.map(point => {
-    const normalizedX = (point.x - bounds.min.x) / maxRange
-    const normalizedY = (point.y - bounds.min.y) / maxRange
-    const normalizedZ = (point.z - bounds.min.z) / maxRange
+    const normalizedX = maxRange == 0 ? 0 : ((point.x - bounds.min.x) / maxRange) * 2 - 1
+    const normalizedY = maxRange == 0 ? 0 : ((point.y - bounds.min.y) / maxRange) * 2 - 1
+    const normalizedZ = maxRange == 0 ? 0 : ((point.z - bounds.min.z) / maxRange) * 2 - 1
 
     return {
       x: normalizedX,
@@ -106,7 +106,6 @@ function normalizeContent(parsedData) {
 export function loadMod1ToJson(content, filename) {
   try {
     const parsedData = parseMod1Content(content, filename)
-    console.log('parsedData', parsedData)
     return normalizeContent(parsedData)
   } catch (error) {
     throw new Error(`Error converting mod1 to JSON: ${error.message}`)

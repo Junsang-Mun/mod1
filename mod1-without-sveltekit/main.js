@@ -47,7 +47,8 @@ async function init() {
     ],
   });
 
-  const pipeline = device.createRenderPipeline({
+  // 와이어프레임용 파이프라인
+  const wireframePipeline = device.createRenderPipeline({
     layout: device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout],
     }),
@@ -69,12 +70,12 @@ async function init() {
     },
     fragment: {
       module: shaderModule,
-      entryPoint: "fs_main",
+      entryPoint: "fs_main_wireframe",
       targets: [{ format }],
     },
     primitive: {
-      topology: "triangle-list",
-      cullMode: "back",
+      topology: "line-list",
+      cullMode: "none",
     },
     depthStencil: {
       format: "depth24plus",
@@ -83,8 +84,86 @@ async function init() {
     },
   });
 
-  let vertexBuffer = null;
-  let numVertices = 0;
+  // 면 렌더링용 파이프라인
+  const facePipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_face",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "triangle-list",
+      cullMode: "none",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
+  // 포인트 렌더링용 파이프라인 (작은 정육면체)
+  const pointPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_point",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "triangle-list",
+      cullMode: "back", // 뒷면 제거로 성능 향상
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true, // 정육면체끼리 겹칠 수 있으므로 depth 쓰기 활성화
+      depthCompare: "less",
+    },
+  });
+
+  let wireframeVertexBuffer = null;
+  let numWireframeVertices = 0;
+  let bottomFaceVertexBuffer = null;
+  let numBottomFaceVertices = 0;
+  let pointVertexBuffer = null;
+  let numPoints = 0;
 
   let cameraX = 0;
   let cameraY = 0;
@@ -176,59 +255,135 @@ async function init() {
 
     const text = await file.text();
     const { points } = loadMod1ToJson(text, file.name);
+    console.log('points', points);
 
-    const SIZE = 0.01;
-    const vertices = [];
+    // 포인트를 작은 정육면체로 변환
+    const pointVertices = [];
+    const pointCubeSize = 0.02; // 작은 정육면체 크기
+    
+    // 정육면체의 8개 정점 (로컬 좌표)
+    const cubeVertices = [
+      [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], // 아래 면
+      [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]      // 위 면
+    ];
+    
+    // 정육면체의 12개 삼각형 (6면 × 2삼각형)
+    const cubeTriangles = [
+      // 아래 면 (z = -1)
+      [0, 1, 2], [0, 2, 3],
+      // 위 면 (z = 1)  
+      [4, 6, 5], [4, 7, 6],
+      // 앞 면 (y = 1)
+      [3, 2, 6], [3, 6, 7],
+      // 뒤 면 (y = -1)
+      [0, 4, 5], [0, 5, 1],
+      // 왼쪽 면 (x = -1)
+      [0, 3, 7], [0, 7, 4],
+      // 오른쪽 면 (x = 1)
+      [1, 5, 6], [1, 6, 2]
+    ];
+
+    points.forEach(point => {
+      
+      // 각 포인트마다 정육면체 생성
+      cubeTriangles.forEach(triangle => {
+        triangle.forEach(vertexIndex => {
+          const localVertex = cubeVertices[vertexIndex];
+          pointVertices.push(
+            point.x + localVertex[0] * pointCubeSize,
+            point.y + localVertex[1] * pointCubeSize,
+            point.z + localVertex[2] * pointCubeSize
+          );
+        });
+      });
+    });
+
+    numPoints = pointVertices.length / 3;
+
+    // 포인트 버텍스 버퍼 생성
+    if (pointVertices.length > 0) {
+      const pointData = new Float32Array(pointVertices);
+      pointVertexBuffer = device.createBuffer({
+        size: pointData.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Float32Array(pointVertexBuffer.getMappedRange()).set(pointData);
+      pointVertexBuffer.unmap();
+    }
+
+    const SIZE = 1;
+    const wireframeVertices = [];
+    const bottomFaceVertices = [];
 
     const cube = [
-      [-1, -1, -1],
-      [1, -1, -1],
-      [1, 1, -1],
-      [-1, 1, -1],
-      [-1, -1, 1],
-      [1, -1, 1],
-      [1, 1, 1],
-      [-1, 1, 1],
+      [-1, -1, -1],  // 0: 아래 면 왼쪽 뒤
+      [1, -1, -1],   // 1: 아래 면 오른쪽 뒤
+      [1, 1, -1],    // 2: 아래 면 오른쪽 앞
+      [-1, 1, -1],   // 3: 아래 면 왼쪽 앞
+      [-1, -1, 1],   // 4: 위 면 왼쪽 뒤
+      [1, -1, 1],    // 5: 위 면 오른쪽 뒤
+      [1, 1, 1],     // 6: 위 면 오른쪽 앞
+      [-1, 1, 1],    // 7: 위 면 왼쪽 앞
     ];
 
-    const faces = [
-      [0, 1, 2],
-      [0, 2, 3],
-      [4, 5, 6],
-      [4, 6, 7],
-      [0, 1, 5],
-      [0, 5, 4],
-      [2, 3, 7],
-      [2, 7, 6],
-      [1, 2, 6],
-      [1, 6, 5],
-      [0, 3, 7],
-      [0, 7, 4],
+    const edges = [
+      // 아래 면의 4개 모서리
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      // 위 면의 4개 모서리  
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      // 세로 4개 모서리
+      [0, 4], [1, 5], [2, 6], [3, 7],
     ];
 
-    for (const p of points) {
-      const base = [p.x, p.y, p.z];
-      for (const face of faces) {
-        for (const i of face) {
-          vertices.push(
-            base[0] + SIZE * cube[i][0],
-            base[1] + SIZE * cube[i][1],
-            base[2] + SIZE * cube[i][2],
-          );
-        }
+    // 와이어프레임 큐브 생성
+    const base = [0, 0, 0];
+    for (const edge of edges) {
+      for (const i of edge) {
+        wireframeVertices.push(
+          base[0] + SIZE * cube[i][0],
+          base[1] + SIZE * cube[i][1],
+          base[2] + SIZE * cube[i][2],
+        );
       }
     }
 
-    numVertices = vertices.length / 3;
+    // 바닥면 삼각형 생성 (아래 면: z = -1)
+    // 첫 번째 삼각형: 0, 1, 2
+    bottomFaceVertices.push(
+      base[0] + SIZE * cube[0][0], base[1] + SIZE * cube[0][1], base[2] + SIZE * cube[0][2], // 0
+      base[0] + SIZE * cube[1][0], base[1] + SIZE * cube[1][1], base[2] + SIZE * cube[1][2], // 1
+      base[0] + SIZE * cube[2][0], base[1] + SIZE * cube[2][1], base[2] + SIZE * cube[2][2]  // 2
+    );
+    // 두 번째 삼각형: 0, 2, 3
+    bottomFaceVertices.push(
+      base[0] + SIZE * cube[0][0], base[1] + SIZE * cube[0][1], base[2] + SIZE * cube[0][2], // 0
+      base[0] + SIZE * cube[2][0], base[1] + SIZE * cube[2][1], base[2] + SIZE * cube[2][2], // 2
+      base[0] + SIZE * cube[3][0], base[1] + SIZE * cube[3][1], base[2] + SIZE * cube[3][2]  // 3
+    );
 
-    const vertexData = new Float32Array(vertices);
-    vertexBuffer = device.createBuffer({
-      size: vertexData.byteLength,
+    numWireframeVertices = wireframeVertices.length / 3;
+    numBottomFaceVertices = bottomFaceVertices.length / 3;
+
+    // 와이어프레임 버텍스 버퍼 생성
+    const wireframeData = new Float32Array(wireframeVertices);
+    wireframeVertexBuffer = device.createBuffer({
+      size: wireframeData.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
-    new Float32Array(vertexBuffer.getMappedRange()).set(vertexData);
-    vertexBuffer.unmap();
+    new Float32Array(wireframeVertexBuffer.getMappedRange()).set(wireframeData);
+    wireframeVertexBuffer.unmap();
+
+    // 바닥면 버텍스 버퍼 생성
+    const bottomFaceData = new Float32Array(bottomFaceVertices);
+    bottomFaceVertexBuffer = device.createBuffer({
+      size: bottomFaceData.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Float32Array(bottomFaceVertexBuffer.getMappedRange()).set(bottomFaceData);
+    bottomFaceVertexBuffer.unmap();
 
     const mvpMatrix = computeIsometricMVP();
     device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
@@ -252,7 +407,7 @@ async function init() {
   });
 
   function frame() {
-    if (!vertexBuffer) {
+    if (!wireframeVertexBuffer || !bottomFaceVertexBuffer) {
       requestAnimationFrame(frame);
       return;
     }
@@ -281,10 +436,26 @@ async function init() {
       },
     });
 
-    pass.setPipeline(pipeline);
+    // 바닥면 렌더링 (먼저 그려서 뒤에 위치)
+    pass.setPipeline(facePipeline);
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, vertexBuffer);
-    pass.draw(numVertices, 1, 0, 0);
+    pass.setVertexBuffer(0, bottomFaceVertexBuffer);
+    pass.draw(numBottomFaceVertices, 1, 0, 0);
+
+    // 와이어프레임 렌더링 (위에 그려서 앞에 위치)
+    pass.setPipeline(wireframePipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, wireframeVertexBuffer);
+    pass.draw(numWireframeVertices, 1, 0, 0);
+
+    // 포인트 렌더링 (가장 위에 그려서 잘 보이도록)
+    if (pointVertexBuffer && numPoints > 0) {
+      pass.setPipeline(pointPipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.setVertexBuffer(0, pointVertexBuffer);
+      pass.draw(numPoints, 1, 0, 0);
+    }
+
     pass.end();
 
     device.queue.submit([encoder.finish()]);
