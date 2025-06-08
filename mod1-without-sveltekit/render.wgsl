@@ -28,3 +28,8 @@ fn fs_main_wireframe() -> @location(0) vec4<f32> {
 fn fs_main_face() -> @location(0) vec4<f32> {
   return vec4<f32>(0.3, 0.6, 0.9, 1.0); // 파란색 바닥면
 }
+
+@fragment
+fn fs_main_point() -> @location(0) vec4<f32> {
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0); // 빨간색 포인트
+}

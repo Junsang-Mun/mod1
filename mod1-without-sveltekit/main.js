@@ -121,10 +121,49 @@ async function init() {
     },
   });
 
+  // 포인트 렌더링용 파이프라인
+  const pointPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_point",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "triangle-list",
+      cullMode: "none",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: false,
+      depthCompare: "less-equal",
+    },
+  });
+
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
   let bottomFaceVertexBuffer = null;
   let numBottomFaceVertices = 0;
+  let pointVertexBuffer = null;
+  let numPoints = 0;
 
   let cameraX = 0;
   let cameraY = 0;
@@ -216,7 +255,32 @@ async function init() {
 
     const text = await file.text();
     const { points } = loadMod1ToJson(text, file.name);
-    console.log('points', points)
+    console.log('points', points);
+
+    // 포인트 데이터를 WebGPU 좌표계로 변환 (0~1을 -1~1로 변환)
+    const pointVertices = [];
+    points.forEach(point => {
+      // 0~1 범위를 -1~1 범위로 변환하고 적절히 스케일링
+      // TODO: loadToJson에서 -1 ~ 1d을 반환하도록 수정
+      const x = (point.x - 0.5) * 2; // 0~1 -> -1~1
+      const y = (point.y - 0.5) * 2; // 0~1 -> -1~1  
+      const z = (point.z - 0.5) * 2; // 0~1 -> -1~1, 약간 앞쪽으로 이동
+      pointVertices.push(x, y, z);
+    });
+
+    numPoints = pointVertices.length / 3;
+
+    // 포인트 버텍스 버퍼 생성
+    if (pointVertices.length > 0) {
+      const pointData = new Float32Array(pointVertices);
+      pointVertexBuffer = device.createBuffer({
+        size: pointData.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Float32Array(pointVertexBuffer.getMappedRange()).set(pointData);
+      pointVertexBuffer.unmap();
+    }
 
     const SIZE = 1;
     const wireframeVertices = [];
@@ -353,6 +417,14 @@ async function init() {
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, wireframeVertexBuffer);
     pass.draw(numWireframeVertices, 1, 0, 0);
+
+    // 포인트 렌더링 (가장 위에 그려서 잘 보이도록)
+    if (pointVertexBuffer && numPoints > 0) {
+      pass.setPipeline(pointPipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.setVertexBuffer(0, pointVertexBuffer);
+      pass.draw(numPoints, 1, 0, 0);
+    }
 
     pass.end();
 
