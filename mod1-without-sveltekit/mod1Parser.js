@@ -106,7 +106,6 @@ function normalizeContent(parsedData) {
 export function loadMod1ToJson(content, filename) {
   try {
     const parsedData = parseMod1Content(content, filename)
-    console.log('parsedData', parsedData)
     return normalizeContent(parsedData)
   } catch (error) {
     throw new Error(`Error converting mod1 to JSON: ${error.message}`)
