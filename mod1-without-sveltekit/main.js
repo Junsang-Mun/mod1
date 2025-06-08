@@ -121,7 +121,7 @@ async function init() {
     },
   });
 
-  // 포인트 렌더링용 파이프라인
+  // 포인트 렌더링용 파이프라인 (작은 정육면체)
   const pointPipeline = device.createRenderPipeline({
     layout: device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout],
@@ -149,12 +149,12 @@ async function init() {
     },
     primitive: {
       topology: "triangle-list",
-      cullMode: "none",
+      cullMode: "back", // 뒷면 제거로 성능 향상
     },
     depthStencil: {
       format: "depth24plus",
-      depthWriteEnabled: false,
-      depthCompare: "less-equal",
+      depthWriteEnabled: true, // 정육면체끼리 겹칠 수 있으므로 depth 쓰기 활성화
+      depthCompare: "less",
     },
   });
 
@@ -257,15 +257,45 @@ async function init() {
     const { points } = loadMod1ToJson(text, file.name);
     console.log('points', points);
 
-    // 포인트 데이터를 WebGPU 좌표계로 변환 (0~1을 -1~1로 변환)
+    // 포인트를 작은 정육면체로 변환
     const pointVertices = [];
+    const pointCubeSize = 0.02; // 작은 정육면체 크기
+    
+    // 정육면체의 8개 정점 (로컬 좌표)
+    const cubeVertices = [
+      [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], // 아래 면
+      [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]      // 위 면
+    ];
+    
+    // 정육면체의 12개 삼각형 (6면 × 2삼각형)
+    const cubeTriangles = [
+      // 아래 면 (z = -1)
+      [0, 1, 2], [0, 2, 3],
+      // 위 면 (z = 1)  
+      [4, 6, 5], [4, 7, 6],
+      // 앞 면 (y = 1)
+      [3, 2, 6], [3, 6, 7],
+      // 뒤 면 (y = -1)
+      [0, 4, 5], [0, 5, 1],
+      // 왼쪽 면 (x = -1)
+      [0, 3, 7], [0, 7, 4],
+      // 오른쪽 면 (x = 1)
+      [1, 5, 6], [1, 6, 2]
+    ];
+
     points.forEach(point => {
-      // 0~1 범위를 -1~1 범위로 변환하고 적절히 스케일링
-      // TODO: loadToJson에서 -1 ~ 1d을 반환하도록 수정
-      const x = (point.x - 0.5) * 2; // 0~1 -> -1~1
-      const y = (point.y - 0.5) * 2; // 0~1 -> -1~1  
-      const z = (point.z - 0.5) * 2; // 0~1 -> -1~1, 약간 앞쪽으로 이동
-      pointVertices.push(x, y, z);
+      
+      // 각 포인트마다 정육면체 생성
+      cubeTriangles.forEach(triangle => {
+        triangle.forEach(vertexIndex => {
+          const localVertex = cubeVertices[vertexIndex];
+          pointVertices.push(
+            point.x + localVertex[0] * pointCubeSize,
+            point.y + localVertex[1] * pointCubeSize,
+            point.z + localVertex[2] * pointCubeSize
+          );
+        });
+      });
     });
 
     numPoints = pointVertices.length / 3;
