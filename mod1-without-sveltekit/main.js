@@ -282,63 +282,85 @@ async function init() {
   let zAxisVertexBuffer = null;
   const numAxisVertices = 2; // 각 축은 선 하나이므로 2개 정점
 
-  let cameraX = 0;
-  let cameraY = 0;
-  let cameraZ = -2;
+  // 카메라 위치 (일반적인 좌표계)
+  let cameraX = 3;
+  let cameraY = 3;
+  let cameraZ = 3;
   let cameraRotation = 0;
   let zoom = 1.0;
 
   /**
-   * Computes the Model-View-Projection (MVP) matrix for an isometric view with Z-axis pointing up.
-   * 
-   * The isometric view is achieved by rotating the scene:
-   * - First rotate around Z-axis by 45° plus camera rotation (azimuth)
-   * - Then rotate around X-axis by -35.264° (elevation) to get the isometric angle
-   * 
-   * This ensures that the Z-axis points upward in the final view.
+   * 벡터 정규화 함수
+   */
+  function normalize(v) {
+    const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    return length > 0 ? [v[0] / length, v[1] / length, v[2] / length] : [0, 0, 0];
+  }
+
+  /**
+   * 벡터 외적 함수
+   */
+  function cross(a, b) {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0]
+    ];
+  }
+
+  /**
+   * lookAt 뷰 매트릭스를 생성하는 함수
+   * 카메라가 (0,0,0)을 바라보도록 설정
+   */
+  function createLookAtMatrix(eyeX, eyeY, eyeZ, targetX, targetY, targetZ, upX, upY, upZ) {
+    // 카메라에서 타겟으로의 벡터 (forward)
+    const forward = normalize([targetX - eyeX, targetY - eyeY, targetZ - eyeZ]);
+    
+    // 업 벡터
+    const up = [upX, upY, upZ];
+    
+    // 오른쪽 벡터 = forward × up
+    const right = normalize(cross(forward, up));
+    
+    // 새로운 업 벡터 = right × forward
+    const newUp = cross(right, forward);
+
+    // 뷰 매트릭스 생성
+    return new Float32Array([
+      right[0], newUp[0], -forward[0], 0,
+      right[1], newUp[1], -forward[1], 0,
+      right[2], newUp[2], -forward[2], 0,
+      -(right[0] * eyeX + right[1] * eyeY + right[2] * eyeZ),
+      -(newUp[0] * eyeX + newUp[1] * eyeY + newUp[2] * eyeZ),
+      -(-forward[0] * eyeX + -forward[1] * eyeY + -forward[2] * eyeZ),
+      1
+    ]);
+  }
+
+  /**
+   * Computes the Model-View-Projection (MVP) matrix using lookAt camera.
+   * 카메라가 (0,0,0)을 바라보는 일반적인 좌표계 사용
    */
   function computeIsometricMVP() {
     const degToRad = (d) => (d * Math.PI) / 180;
-    // Z축이 위를 향하도록 회전 순서와 각도 조정
-    const azimuth = degToRad(45 + cameraRotation); // Z축 중심 회전 (수평 회전)
-    const elevation = degToRad(-35.264); // X축 중심 회전 (수직 회전, 음수로 변경)
+    
+    // 카메라 회전을 적용한 카메라 위치 계산
+    const rotation = degToRad(cameraRotation);
+    const cosRot = Math.cos(rotation);
+    const sinRot = Math.sin(rotation);
+    
+    // 카메라 위치를 Y축을 중심으로 회전
+    const rotatedCameraX = cameraX * cosRot - cameraZ * sinRot;
+    const rotatedCameraZ = cameraX * sinRot + cameraZ * cosRot;
+    
+    // lookAt 매트릭스 생성 (카메라가 원점 (0,0,0)을 바라봄)
+    const view = createLookAtMatrix(
+      rotatedCameraX, cameraY, rotatedCameraZ,  // 카메라 위치
+      0, 0, 0,                                  // 타겟 위치 (원점)
+      0, 0, 1                                   // 업 벡터 (Z축이 위)
+    );
 
-    const cosAz = Math.cos(azimuth), sinAz = Math.sin(azimuth);
-    const cosEl = Math.cos(elevation), sinEl = Math.sin(elevation);
-
-    // Z축 중심 회전 매트릭스 (azimuth)
-    const rotZ = [
-      cosAz, -sinAz, 0, 0,
-      sinAz, cosAz, 0, 0,
-      0, 0, 1, 0,
-      0, 0, 0, 1
-    ];
-
-    // X축 중심 회전 매트릭스 (elevation)
-    const rotX = [
-      1, 0, 0, 0,
-      0, cosEl, -sinEl, 0,
-      0, sinEl, cosEl, 0,
-      0, 0, 0, 1
-    ];
-
-    // 뷰 매트릭스 = rotX * rotZ (먼저 Z축 회전, 그 다음 X축 회전)
-    const view = new Float32Array(16);
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
-        view[j * 4 + i] =
-          rotX[i * 4 + 0] * rotZ[j * 4 + 0] +
-          rotX[i * 4 + 1] * rotZ[j * 4 + 1] +
-          rotX[i * 4 + 2] * rotZ[j * 4 + 2] +
-          rotX[i * 4 + 3] * rotZ[j * 4 + 3];
-      }
-    }
-
-    // 카메라 위치 설정
-    view[12] = cameraX;
-    view[13] = cameraY;
-    view[14] = cameraZ;
-
+    // 직교 투영 매트릭스
     const left = -1.5 / zoom,
       right = 1.5 / zoom;
     const bottom = -1.5 / zoom,
@@ -365,6 +387,7 @@ async function init() {
       1,
     ]);
 
+    // MVP = Projection × View
     const mvp = new Float32Array(16);
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
@@ -519,17 +542,23 @@ async function init() {
   });
 
   window.addEventListener("keydown", (e) => {
-    const step = 0.05;
+    const step = 0.2;
     const rotateStep = 5; // degrees
     const zoomFactor = 0.1;
-    if (e.key === "ArrowUp") cameraY += step;
-    else if (e.key === "ArrowDown") cameraY -= step;
-    else if (e.key === "ArrowLeft") cameraX -= step;
-    else if (e.key === "ArrowRight") cameraX += step;
-    else if (e.key === "w") zoom *= 1 - zoomFactor;
-    else if (e.key === "s") zoom *= 1 + zoomFactor;
-    else if (e.key === "q") cameraRotation -= rotateStep;
-    else if (e.key === "e") cameraRotation += rotateStep;
+    
+    // 카메라 이동 (WASD: 수평면 이동, QE: 수직 이동)
+    if (e.key === "w") cameraY += step;        // 앞으로
+    else if (e.key === "s") cameraY -= step;   // 뒤로
+    else if (e.key === "a") cameraX -= step;   // 왼쪽으로
+    else if (e.key === "d") cameraX += step;   // 오른쪽으로
+    else if (e.key === "q") cameraZ -= step;   // 아래로
+    else if (e.key === "e") cameraZ += step;   // 위로
+    
+    // 화살표 키: 카메라 회전과 줌
+    else if (e.key === "ArrowLeft") cameraRotation -= rotateStep;  // 왼쪽 회전
+    else if (e.key === "ArrowRight") cameraRotation += rotateStep; // 오른쪽 회전
+    else if (e.key === "ArrowUp") zoom *= 1 + zoomFactor;         // 줌 인
+    else if (e.key === "ArrowDown") zoom *= 1 - zoomFactor;       // 줌 아웃
 
     const mvpMatrix = computeIsometricMVP();
     device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
