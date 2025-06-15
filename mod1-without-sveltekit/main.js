@@ -1,4 +1,9 @@
 import { loadMod1ToJson } from "./mod1Parser.js";
+import { MatrixUtils } from "./utils/matrixUtils.js";
+import { Camera } from "./graphics/camera.js";
+import { WebGPUSetup } from "./graphics/webgpu.js";
+import { PipelineFactory } from "./graphics/pipelines.js";
+import { GeometryUtils } from "./geometry/geometryUtils.js";
 
 window.addEventListener("DOMContentLoaded", () => {
   init().catch((err) => console.error("Initialization error:", err));
@@ -8,155 +13,36 @@ async function init() {
   const canvas = document.getElementById("gpu-canvas");
   const mod1Input = document.getElementById("mod1Input");
 
-  if (!navigator.gpu) {
-    alert("WebGPU not supported");
-    return;
-  }
+  // Initialize WebGPU
+  const webgpu = new WebGPUSetup();
+  const { device, context, format } = await webgpu.initialize(canvas);
 
-  const adapter = await navigator.gpu.requestAdapter();
-  const device = await adapter.requestDevice();
-  const context = canvas.getContext("webgpu");
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  context.configure({ device, format, alphaMode: "opaque" });
+  // Create shader module
+  const shaderModule = await webgpu.createShaderModule("render.wgsl");
 
-  const shaderSource = await fetch("render.wgsl").then((r) => r.text());
-  const shaderModule = device.createShaderModule({ code: shaderSource });
+  // Create MVP buffer
+  const mvpBuffer = webgpu.createUniformBuffer(64);
 
-  const mvpBuffer = device.createBuffer({
-    size: 64,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
+  // Create bind group layout
+  const bindGroupLayout = webgpu.createBindGroupLayout([
+    {
+      binding: 0,
+      visibility: GPUShaderStage.VERTEX,
+      buffer: {},
+    },
+  ]);
 
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.VERTEX,
-        buffer: {},
-      },
-    ],
-  });
+  // Create bind group
+  const bindGroup = webgpu.createBindGroup(bindGroupLayout, [
+    {
+      binding: 0,
+      resource: { buffer: mvpBuffer },
+    },
+  ]);
 
-  const bindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: { buffer: mvpBuffer },
-      },
-    ],
-  });
-
-  // 와이어프레임용 파이프라인
-  const wireframePipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    vertex: {
-      module: shaderModule,
-      entryPoint: "vs_main",
-      buffers: [
-        {
-          arrayStride: 12,
-          attributes: [
-            {
-              shaderLocation: 0,
-              offset: 0,
-              format: "float32x3",
-            },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: shaderModule,
-      entryPoint: "fs_main_wireframe",
-      targets: [{ format }],
-    },
-    primitive: {
-      topology: "line-list",
-      cullMode: "none",
-    },
-    depthStencil: {
-      format: "depth24plus",
-      depthWriteEnabled: true,
-      depthCompare: "less",
-    },
-  });
-
-  // 면 렌더링용 파이프라인
-  const facePipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    vertex: {
-      module: shaderModule,
-      entryPoint: "vs_main",
-      buffers: [
-        {
-          arrayStride: 12,
-          attributes: [
-            {
-              shaderLocation: 0,
-              offset: 0,
-              format: "float32x3",
-            },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: shaderModule,
-      entryPoint: "fs_main_face",
-      targets: [{ format }],
-    },
-    primitive: {
-      topology: "triangle-list",
-      cullMode: "none",
-    },
-    depthStencil: {
-      format: "depth24plus",
-      depthWriteEnabled: true,
-      depthCompare: "less",
-    },
-  });
-
-  // 포인트 렌더링용 파이프라인 (작은 정육면체)
-  const pointPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    vertex: {
-      module: shaderModule,
-      entryPoint: "vs_main",
-      buffers: [
-        {
-          arrayStride: 12,
-          attributes: [
-            {
-              shaderLocation: 0,
-              offset: 0,
-              format: "float32x3",
-            },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: shaderModule,
-      entryPoint: "fs_main_point",
-      targets: [{ format }],
-    },
-    primitive: {
-      topology: "triangle-list",
-      cullMode: "back", // 뒷면 제거로 성능 향상
-    },
-    depthStencil: {
-      format: "depth24plus",
-      depthWriteEnabled: true, // 정육면체끼리 겹칠 수 있으므로 depth 쓰기 활성화
-      depthCompare: "less",
-    },
-  });
+  // Create rendering pipelines
+  const pipelineFactory = new PipelineFactory(device, format);
+  const pipelines = pipelineFactory.createAllPipelines(shaderModule, bindGroupLayout);
 
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
@@ -165,90 +51,38 @@ async function init() {
   let pointVertexBuffer = null;
   let numPoints = 0;
 
-  let cameraX = 0;
-  let cameraY = 0;
-  let cameraZ = -2;
-  let cameraRotation = 0;
-  let zoom = 1.0;
+  // 좌표축 버퍼들
+  let xAxisVertexBuffer = null;
+  let yAxisVertexBuffer = null;
+  let zAxisVertexBuffer = null;
+  const numAxisVertices = 2; // 각 축은 선 하나이므로 2개 정점
+
+  // Initialize camera
+  const camera = new Camera();
 
   /**
-   * Computes the Model-View-Projection (MVP) matrix for an isometric view.
-   * 
-   * The isometric view is achieved by rotating the scene:
-   * - Around the X-axis by 35.264° to simulate the isometric angle.
-   * - Around the Y-axis by 45° plus an optional camera rotation.
-   * 
-   * The function combines two rotation matrices (`rotX` and `rotY`) to create
-   * a view matrix. This matrix is used to transform 3D coordinates into the
-   * isometric perspective.
+   * Create Model matrix (identity for now, can be extended for object transformations)
    */
-  function computeIsometricMVP() {
-    const degToRad = (d) => (d * Math.PI) / 180;
-    const angleX = degToRad(35.264);
-    const angleY = degToRad(45 + cameraRotation);
+  function createModelMatrix() {
+    return MatrixUtils.identity();
+  }
 
-    const cx = Math.cos(angleX),
-      sx = Math.sin(angleX);
-    const cy = Math.cos(angleY),
-      sy = Math.sin(angleY);
+  /**
+   * Compute MVP matrix using proper graphics pipeline
+   */
+  function computeMVPMatrix() {
+    const modelMatrix = createModelMatrix();
+    const viewMatrix = camera.createViewMatrix();
+    const projectionMatrix = camera.createProjectionMatrix(canvas);
 
-    const rotX = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0, 0, 0, 0, 1];
+    // MVP = Projection × View × Model
+    const mv = MatrixUtils.multiply(viewMatrix, modelMatrix);
+    const mvp = MatrixUtils.multiply(projectionMatrix, mv);
 
-    const rotY = [cy, 0, sy, 0, 0, 1, 0, 0, -sy, 0, cy, 0, 0, 0, 0, 1];
-
-    const view = new Float32Array(16);
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
-        view[j * 4 + i] =
-          rotY[i] * rotX[j * 4 + 0] +
-          rotY[i + 4] * rotX[j * 4 + 1] +
-          rotY[i + 8] * rotX[j * 4 + 2] +
-          rotY[i + 12] * rotX[j * 4 + 3];
-      }
-    }
-    view[12] = cameraX;
-    view[13] = cameraY;
-    view[14] = cameraZ;
-
-    const left = -1.5 / zoom,
-      right = 1.5 / zoom;
-    const bottom = -1.5 / zoom,
-      top = 1.5 / zoom;
-    const near = -10,
-      far = 10;
-
-    const ortho = new Float32Array([
-      2 / (right - left),
-      0,
-      0,
-      0,
-      0,
-      2 / (top - bottom),
-      0,
-      0,
-      0,
-      0,
-      -2 / (far - near),
-      0,
-      -(right + left) / (right - left),
-      -(top + bottom) / (top - bottom),
-      -(far + near) / (far - near),
-      1,
-    ]);
-
-    const mvp = new Float32Array(16);
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
-        mvp[j * 4 + i] =
-          ortho[i] * view[j * 4 + 0] +
-          ortho[i + 4] * view[j * 4 + 1] +
-          ortho[i + 8] * view[j * 4 + 2] +
-          ortho[i + 12] * view[j * 4 + 3];
-      }
-    }
     return mvp;
   }
 
+  // Handle mod1 file input
   mod1Input.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -257,162 +91,80 @@ async function init() {
     const { points } = loadMod1ToJson(text, file.name);
     console.log('points', points);
 
-    // 포인트를 작은 정육면체로 변환
-    const pointVertices = [];
-    const pointCubeSize = 0.02; // 작은 정육면체 크기
-    
-    // 정육면체의 8개 정점 (로컬 좌표)
-    const cubeVertices = [
-      [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], // 아래 면
-      [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]      // 위 면
-    ];
-    
-    // 정육면체의 12개 삼각형 (6면 × 2삼각형)
-    const cubeTriangles = [
-      // 아래 면 (z = -1)
-      [0, 1, 2], [0, 2, 3],
-      // 위 면 (z = 1)  
-      [4, 6, 5], [4, 7, 6],
-      // 앞 면 (y = 1)
-      [3, 2, 6], [3, 6, 7],
-      // 뒤 면 (y = -1)
-      [0, 4, 5], [0, 5, 1],
-      // 왼쪽 면 (x = -1)
-      [0, 3, 7], [0, 7, 4],
-      // 오른쪽 면 (x = 1)
-      [1, 5, 6], [1, 6, 2]
-    ];
-
-    points.forEach(point => {
-      
-      // 각 포인트마다 정육면체 생성
-      cubeTriangles.forEach(triangle => {
-        triangle.forEach(vertexIndex => {
-          const localVertex = cubeVertices[vertexIndex];
-          pointVertices.push(
-            point.x + localVertex[0] * pointCubeSize,
-            point.y + localVertex[1] * pointCubeSize,
-            point.z + localVertex[2] * pointCubeSize
-          );
-        });
-      });
-    });
-
+    // Generate point geometry
+    const pointVertices = GeometryUtils.generatePointCubes(points);
     numPoints = pointVertices.length / 3;
 
-    // 포인트 버텍스 버퍼 생성
+    // Create point vertex buffer
     if (pointVertices.length > 0) {
       const pointData = new Float32Array(pointVertices);
-      pointVertexBuffer = device.createBuffer({
-        size: pointData.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-        mappedAtCreation: true,
-      });
-      new Float32Array(pointVertexBuffer.getMappedRange()).set(pointData);
-      pointVertexBuffer.unmap();
+      pointVertexBuffer = webgpu.createVertexBuffer(pointData);
     }
 
-    const SIZE = 1;
-    const wireframeVertices = [];
-    const bottomFaceVertices = [];
-
-    const cube = [
-      [-1, -1, -1],  // 0: 아래 면 왼쪽 뒤
-      [1, -1, -1],   // 1: 아래 면 오른쪽 뒤
-      [1, 1, -1],    // 2: 아래 면 오른쪽 앞
-      [-1, 1, -1],   // 3: 아래 면 왼쪽 앞
-      [-1, -1, 1],   // 4: 위 면 왼쪽 뒤
-      [1, -1, 1],    // 5: 위 면 오른쪽 뒤
-      [1, 1, 1],     // 6: 위 면 오른쪽 앞
-      [-1, 1, 1],    // 7: 위 면 왼쪽 앞
-    ];
-
-    const edges = [
-      // 아래 면의 4개 모서리
-      [0, 1], [1, 2], [2, 3], [3, 0],
-      // 위 면의 4개 모서리  
-      [4, 5], [5, 6], [6, 7], [7, 4],
-      // 세로 4개 모서리
-      [0, 4], [1, 5], [2, 6], [3, 7],
-    ];
-
-    // 와이어프레임 큐브 생성
-    const base = [0, 0, 0];
-    for (const edge of edges) {
-      for (const i of edge) {
-        wireframeVertices.push(
-          base[0] + SIZE * cube[i][0],
-          base[1] + SIZE * cube[i][1],
-          base[2] + SIZE * cube[i][2],
-        );
-      }
-    }
-
-    // 바닥면 삼각형 생성 (아래 면: z = -1)
-    // 첫 번째 삼각형: 0, 1, 2
-    bottomFaceVertices.push(
-      base[0] + SIZE * cube[0][0], base[1] + SIZE * cube[0][1], base[2] + SIZE * cube[0][2], // 0
-      base[0] + SIZE * cube[1][0], base[1] + SIZE * cube[1][1], base[2] + SIZE * cube[1][2], // 1
-      base[0] + SIZE * cube[2][0], base[1] + SIZE * cube[2][1], base[2] + SIZE * cube[2][2]  // 2
-    );
-    // 두 번째 삼각형: 0, 2, 3
-    bottomFaceVertices.push(
-      base[0] + SIZE * cube[0][0], base[1] + SIZE * cube[0][1], base[2] + SIZE * cube[0][2], // 0
-      base[0] + SIZE * cube[2][0], base[1] + SIZE * cube[2][1], base[2] + SIZE * cube[2][2], // 2
-      base[0] + SIZE * cube[3][0], base[1] + SIZE * cube[3][1], base[2] + SIZE * cube[3][2]  // 3
-    );
+    // Generate cube geometry
+    const wireframeVertices = GeometryUtils.generateCubeEdges(2);
+    const bottomFaceVertices = GeometryUtils.generateCubeBottomFace(2);
 
     numWireframeVertices = wireframeVertices.length / 3;
     numBottomFaceVertices = bottomFaceVertices.length / 3;
 
-    // 와이어프레임 버텍스 버퍼 생성
+    // Create wireframe vertex buffer
     const wireframeData = new Float32Array(wireframeVertices);
-    wireframeVertexBuffer = device.createBuffer({
-      size: wireframeData.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      mappedAtCreation: true,
-    });
-    new Float32Array(wireframeVertexBuffer.getMappedRange()).set(wireframeData);
-    wireframeVertexBuffer.unmap();
+    wireframeVertexBuffer = webgpu.createVertexBuffer(wireframeData);
 
-    // 바닥면 버텍스 버퍼 생성
+    // Create bottom face vertex buffer
     const bottomFaceData = new Float32Array(bottomFaceVertices);
-    bottomFaceVertexBuffer = device.createBuffer({
-      size: bottomFaceData.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      mappedAtCreation: true,
-    });
-    new Float32Array(bottomFaceVertexBuffer.getMappedRange()).set(bottomFaceData);
-    bottomFaceVertexBuffer.unmap();
+    bottomFaceVertexBuffer = webgpu.createVertexBuffer(bottomFaceData);
 
-    const mvpMatrix = computeIsometricMVP();
-    device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
+    // Update MVP matrix
+    const mvpMatrix = computeMVPMatrix();
+    webgpu.writeBuffer(mvpBuffer, 0, mvpMatrix);
   });
 
   window.addEventListener("keydown", (e) => {
-    const step = 0.05;
+    const moveStep = 0.2;
     const rotateStep = 5; // degrees
     const zoomFactor = 0.1;
-    if (e.key === "ArrowUp") cameraY += step;
-    else if (e.key === "ArrowDown") cameraY -= step;
-    else if (e.key === "ArrowLeft") cameraX -= step;
-    else if (e.key === "ArrowRight") cameraX += step;
-    else if (e.key === "w") zoom *= 1 - zoomFactor;
-    else if (e.key === "s") zoom *= 1 + zoomFactor;
-    else if (e.key === "q") cameraRotation -= rotateStep;
-    else if (e.key === "e") cameraRotation += rotateStep;
+    
+    // Camera movement (WASD: horizontal movement, QE: vertical movement)
+    if (e.key === "w") camera.moveRelative(moveStep, 0, 0);     // Forward
+    else if (e.key === "s") camera.moveRelative(-moveStep, 0, 0);  // Backward
+    else if (e.key === "a") camera.moveRelative(0, -moveStep, 0);  // Left
+    else if (e.key === "d") camera.moveRelative(0, moveStep, 0);   // Right
+    else if (e.key === "q") camera.moveRelative(0, 0, -moveStep);  // Down
+    else if (e.key === "e") camera.moveRelative(0, 0, moveStep);   // Up
+    
+    // Arrow keys: camera rotation and zoom
+    else if (e.key === "ArrowLeft") {
+      camera.rotation -= rotateStep;
+      camera.updatePosition();
+    }
+    else if (e.key === "ArrowRight") {
+      camera.rotation += rotateStep;
+      camera.updatePosition();
+    }
+    else if (e.key === "ArrowUp") {
+      camera.zoom *= (1 + zoomFactor);
+      camera.updatePosition();
+    }
+    else if (e.key === "ArrowDown") {
+      camera.zoom *= (1 - zoomFactor);
+      camera.updatePosition();
+    }
 
-    const mvpMatrix = computeIsometricMVP();
-    device.queue.writeBuffer(mvpBuffer, 0, mvpMatrix);
+    // Update MVP matrix
+    const mvpMatrix = computeMVPMatrix();
+    webgpu.writeBuffer(mvpBuffer, 0, mvpMatrix);
   });
 
+  // Render loop
   function frame() {
     if (!wireframeVertexBuffer || !bottomFaceVertexBuffer) {
       requestAnimationFrame(frame);
       return;
     }
 
-    const encoder = device.createCommandEncoder();
+    const encoder = webgpu.createCommandEncoder();
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
@@ -436,31 +188,63 @@ async function init() {
       },
     });
 
-    // 바닥면 렌더링 (먼저 그려서 뒤에 위치)
-    pass.setPipeline(facePipeline);
+    // Render coordinate axes
+    pass.setPipeline(pipelines.xAxis);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, xAxisVertexBuffer);
+    pass.draw(numAxisVertices, 1, 0, 0);
+
+    pass.setPipeline(pipelines.yAxis);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, yAxisVertexBuffer);
+    pass.draw(numAxisVertices, 1, 0, 0);
+
+    pass.setPipeline(pipelines.zAxis);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, zAxisVertexBuffer);
+    pass.draw(numAxisVertices, 1, 0, 0);
+
+    // Render bottom face
+    pass.setPipeline(pipelines.face);
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, bottomFaceVertexBuffer);
     pass.draw(numBottomFaceVertices, 1, 0, 0);
 
-    // 와이어프레임 렌더링 (위에 그려서 앞에 위치)
-    pass.setPipeline(wireframePipeline);
+    // Render wireframe
+    pass.setPipeline(pipelines.wireframe);
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, wireframeVertexBuffer);
     pass.draw(numWireframeVertices, 1, 0, 0);
 
-    // 포인트 렌더링 (가장 위에 그려서 잘 보이도록)
+    // Render points
     if (pointVertexBuffer && numPoints > 0) {
-      pass.setPipeline(pointPipeline);
+      pass.setPipeline(pipelines.point);
       pass.setBindGroup(0, bindGroup);
       pass.setVertexBuffer(0, pointVertexBuffer);
       pass.draw(numPoints, 1, 0, 0);
     }
 
     pass.end();
-
-    device.queue.submit([encoder.finish()]);
+    webgpu.submitCommands([encoder.finish()]);
     requestAnimationFrame(frame);
   }
+
+  // Initialize coordinate axes
+  function initializeAxes() {
+    const axes = GeometryUtils.generateAxes();
+    
+    // Create axis vertex buffers
+    xAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.xAxis));
+    yAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.yAxis));
+    zAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.zAxis));
+  }
+
+  // Initialize
+  initializeAxes();
+  
+  // Set initial MVP matrix
+  const initialMvpMatrix = computeMVPMatrix();
+  webgpu.writeBuffer(mvpBuffer, 0, initialMvpMatrix);
 
   requestAnimationFrame(frame);
 }

@@ -33,3 +33,18 @@ fn fs_main_face() -> @location(0) vec4<f32> {
 fn fs_main_point() -> @location(0) vec4<f32> {
   return vec4<f32>(1.0, 0.0, 0.0, 1.0); // 빨간색 포인트
 }
+
+@fragment
+fn fs_main_x_axis() -> @location(0) vec4<f32> {
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0); // 빨간색 X축
+}
+
+@fragment
+fn fs_main_y_axis() -> @location(0) vec4<f32> {
+  return vec4<f32>(0.0, 1.0, 0.0, 1.0); // 녹색 Y축
+}
+
+@fragment
+fn fs_main_z_axis() -> @location(0) vec4<f32> {
+  return vec4<f32>(0.0, 0.0, 1.0, 1.0); // 파란색 Z축
+}
