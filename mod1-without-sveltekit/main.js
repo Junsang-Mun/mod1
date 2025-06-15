@@ -158,12 +158,129 @@ async function init() {
     },
   });
 
+  // X축 렌더링용 파이프라인 (빨간색)
+  const xAxisPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_x_axis",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "line-list",
+      cullMode: "none",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
+  // Y축 렌더링용 파이프라인 (녹색)
+  const yAxisPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_y_axis",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "line-list",
+      cullMode: "none",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
+  // Z축 렌더링용 파이프라인 (파란색)
+  const zAxisPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout],
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x3",
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs_main_z_axis",
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: "line-list",
+      cullMode: "none",
+    },
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
   let bottomFaceVertexBuffer = null;
   let numBottomFaceVertices = 0;
   let pointVertexBuffer = null;
   let numPoints = 0;
+
+  // 좌표축 버퍼들
+  let xAxisVertexBuffer = null;
+  let yAxisVertexBuffer = null;
+  let zAxisVertexBuffer = null;
+  const numAxisVertices = 2; // 각 축은 선 하나이므로 2개 정점
 
   let cameraX = 0;
   let cameraY = 0;
@@ -172,40 +289,52 @@ async function init() {
   let zoom = 1.0;
 
   /**
-   * Computes the Model-View-Projection (MVP) matrix for an isometric view.
+   * Computes the Model-View-Projection (MVP) matrix for an isometric view with Z-axis pointing up.
    * 
    * The isometric view is achieved by rotating the scene:
-   * - Around the X-axis by 35.264° to simulate the isometric angle.
-   * - Around the Y-axis by 45° plus an optional camera rotation.
+   * - First rotate around Z-axis by 45° plus camera rotation (azimuth)
+   * - Then rotate around X-axis by -35.264° (elevation) to get the isometric angle
    * 
-   * The function combines two rotation matrices (`rotX` and `rotY`) to create
-   * a view matrix. This matrix is used to transform 3D coordinates into the
-   * isometric perspective.
+   * This ensures that the Z-axis points upward in the final view.
    */
   function computeIsometricMVP() {
     const degToRad = (d) => (d * Math.PI) / 180;
-    const angleX = degToRad(35.264);
-    const angleY = degToRad(45 + cameraRotation);
+    // Z축이 위를 향하도록 회전 순서와 각도 조정
+    const azimuth = degToRad(45 + cameraRotation); // Z축 중심 회전 (수평 회전)
+    const elevation = degToRad(-35.264); // X축 중심 회전 (수직 회전, 음수로 변경)
 
-    const cx = Math.cos(angleX),
-      sx = Math.sin(angleX);
-    const cy = Math.cos(angleY),
-      sy = Math.sin(angleY);
+    const cosAz = Math.cos(azimuth), sinAz = Math.sin(azimuth);
+    const cosEl = Math.cos(elevation), sinEl = Math.sin(elevation);
 
-    const rotX = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0, 0, 0, 0, 1];
+    // Z축 중심 회전 매트릭스 (azimuth)
+    const rotZ = [
+      cosAz, -sinAz, 0, 0,
+      sinAz, cosAz, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ];
 
-    const rotY = [cy, 0, sy, 0, 0, 1, 0, 0, -sy, 0, cy, 0, 0, 0, 0, 1];
+    // X축 중심 회전 매트릭스 (elevation)
+    const rotX = [
+      1, 0, 0, 0,
+      0, cosEl, -sinEl, 0,
+      0, sinEl, cosEl, 0,
+      0, 0, 0, 1
+    ];
 
+    // 뷰 매트릭스 = rotX * rotZ (먼저 Z축 회전, 그 다음 X축 회전)
     const view = new Float32Array(16);
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
         view[j * 4 + i] =
-          rotY[i] * rotX[j * 4 + 0] +
-          rotY[i + 4] * rotX[j * 4 + 1] +
-          rotY[i + 8] * rotX[j * 4 + 2] +
-          rotY[i + 12] * rotX[j * 4 + 3];
+          rotX[i * 4 + 0] * rotZ[j * 4 + 0] +
+          rotX[i * 4 + 1] * rotZ[j * 4 + 1] +
+          rotX[i * 4 + 2] * rotZ[j * 4 + 2] +
+          rotX[i * 4 + 3] * rotZ[j * 4 + 3];
       }
     }
+
+    // 카메라 위치 설정
     view[12] = cameraX;
     view[13] = cameraY;
     view[14] = cameraZ;
@@ -436,13 +565,32 @@ async function init() {
       },
     });
 
-    // 바닥면 렌더링 (먼저 그려서 뒤에 위치)
+    // 좌표축 렌더링 (항상 가장 먼저 그려서 다른 객체들보다 뒤에 위치)
+    // X축 (빨간색)
+    pass.setPipeline(xAxisPipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, xAxisVertexBuffer);
+    pass.draw(numAxisVertices, 1, 0, 0);
+
+    // Y축 (녹색)
+    pass.setPipeline(yAxisPipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, yAxisVertexBuffer);
+    pass.draw(numAxisVertices, 1, 0, 0);
+
+    // Z축 (파란색)
+    pass.setPipeline(zAxisPipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, zAxisVertexBuffer);
+    pass.draw(numAxisVertices, 1, 0, 0);
+
+    // 바닥면 렌더링
     pass.setPipeline(facePipeline);
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, bottomFaceVertexBuffer);
     pass.draw(numBottomFaceVertices, 1, 0, 0);
 
-    // 와이어프레임 렌더링 (위에 그려서 앞에 위치)
+    // 와이어프레임 렌더링
     pass.setPipeline(wireframePipeline);
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, wireframeVertexBuffer);
@@ -461,6 +609,63 @@ async function init() {
     device.queue.submit([encoder.finish()]);
     requestAnimationFrame(frame);
   }
+
+  // 좌표축 초기화 (항상 표시)
+  function initializeAxes() {
+    const axisLength = 1.5; // 축의 길이
+    
+    // X축: (0,0,0) -> (axisLength,0,0) - 빨간색
+    const xAxisVertices = new Float32Array([
+      0.0, 0.0, 0.0,
+      axisLength, 0.0, 0.0
+    ]);
+    
+    // Y축: (0,0,0) -> (0,axisLength,0) - 녹색
+    const yAxisVertices = new Float32Array([
+      0.0, 0.0, 0.0,
+      0.0, axisLength, 0.0
+    ]);
+    
+    // Z축: (0,0,0) -> (0,0,axisLength) - 파란색
+    const zAxisVertices = new Float32Array([
+      0.0, 0.0, 0.0,
+      0.0, 0.0, axisLength
+    ]);
+
+    // X축 버퍼 생성
+    xAxisVertexBuffer = device.createBuffer({
+      size: xAxisVertices.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Float32Array(xAxisVertexBuffer.getMappedRange()).set(xAxisVertices);
+    xAxisVertexBuffer.unmap();
+
+    // Y축 버퍼 생성
+    yAxisVertexBuffer = device.createBuffer({
+      size: yAxisVertices.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Float32Array(yAxisVertexBuffer.getMappedRange()).set(yAxisVertices);
+    yAxisVertexBuffer.unmap();
+
+    // Z축 버퍼 생성
+    zAxisVertexBuffer = device.createBuffer({
+      size: zAxisVertices.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    new Float32Array(zAxisVertexBuffer.getMappedRange()).set(zAxisVertices);
+    zAxisVertexBuffer.unmap();
+  }
+
+  // 좌표축 초기화 실행
+  initializeAxes();
+
+  // 초기 MVP 매트릭스 설정
+  const initialMvpMatrix = computeIsometricMVP();
+  device.queue.writeBuffer(mvpBuffer, 0, initialMvpMatrix);
 
   requestAnimationFrame(frame);
 }
