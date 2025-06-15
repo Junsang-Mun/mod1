@@ -13,6 +13,9 @@ export class WebGPUSetup {
     }
 
     const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      throw new Error("Failed to get GPU adapter");
+    }
     this.device = await adapter.requestDevice();
     this.context = canvas.getContext("webgpu");
     this.format = navigator.gpu.getPreferredCanvasFormat();
