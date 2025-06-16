@@ -48,8 +48,8 @@ async function init() {
   let numWireframeVertices = 0;
   let bottomFaceVertexBuffer = null;
   let numBottomFaceVertices = 0;
-  let pointVertexBuffer = null;
-  let numPoints = 0;
+  let terrainVertexBuffer = null;
+  let numTerrainVertices = 0;
 
   // 좌표축 버퍼들
   let xAxisVertexBuffer = null;
@@ -91,14 +91,14 @@ async function init() {
     const { points } = loadMod1ToJson(text, file.name);
     console.log('points', points);
 
-    // Generate point geometry
-    const pointVertices = GeometryUtils.generatePointCubes(points);
-    numPoints = pointVertices.length / 3;
+    // Generate terrain geometry from points
+    const terrainVertices = GeometryUtils.generateTerrain(points);
+    numTerrainVertices = terrainVertices.length / 3;
 
-    // Create point vertex buffer
-    if (pointVertices.length > 0) {
-      const pointData = new Float32Array(pointVertices);
-      pointVertexBuffer = webgpu.createVertexBuffer(pointData);
+    // Create terrain vertex buffer
+    if (terrainVertices.length > 0) {
+      const terrainData = new Float32Array(terrainVertices);
+      terrainVertexBuffer = webgpu.createVertexBuffer(terrainData);
     }
 
     // Generate cube geometry
@@ -216,12 +216,13 @@ async function init() {
     pass.setVertexBuffer(0, wireframeVertexBuffer);
     pass.draw(numWireframeVertices, 1, 0, 0);
 
-    // Render points
-    if (pointVertexBuffer && numPoints > 0) {
-      pass.setPipeline(pipelines.point);
+    // Render terrain
+    if (terrainVertexBuffer && numTerrainVertices > 0) {
+      // pass.setPipeline(pipelines.face);
+      pass.setPipeline(pipelines.wireframe);
       pass.setBindGroup(0, bindGroup);
-      pass.setVertexBuffer(0, pointVertexBuffer);
-      pass.draw(numPoints, 1, 0, 0);
+      pass.setVertexBuffer(0, terrainVertexBuffer);
+      pass.draw(numTerrainVertices, 1, 0, 0);
     }
 
     pass.end();

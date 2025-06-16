@@ -60,47 +60,123 @@ export class GeometryUtils {
     return bottomFaceVertices;
   }
 
-  // Generate point cloud as small cubes
-  static generatePointCubes(points, cubeSize = 0.02) {
-    const pointVertices = [];
-    
-    // 정육면체의 8개 정점 (로컬 좌표)
-    const cubeVertices = [
-      [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], // 아래 면
-      [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]      // 위 면
-    ];
-    
-    // 정육면체의 12개 삼각형 (6면 × 2삼각형)
-    const cubeTriangles = [
-      // 아래 면 (z = -1)
-      [0, 1, 2], [0, 2, 3],
-      // 위 면 (z = 1)  
-      [4, 6, 5], [4, 7, 6],
-      // 앞 면 (y = 1)
-      [3, 2, 6], [3, 6, 7],
-      // 뒤 면 (y = -1)
-      [0, 4, 5], [0, 5, 1],
-      // 왼쪽 면 (x = -1)
-      [0, 3, 7], [0, 7, 4],
-      // 오른쪽 면 (x = 1)
-      [1, 5, 6], [1, 6, 2]
-    ];
+  // Generate terrain mesh from points using interpolation
+  static generateTerrain(points, gridResolution = 50, terrainSize = 2) {
+    if (!points || points.length === 0) {
+      return [];
+    }
 
+    // Set bounds to -1 ~ 1 for both x and y
+    const minX = -1;
+    const maxX = 1;
+    const minY = -1;
+    const maxY = 1;
+
+    // Generate grid vertices with interpolated heights
+    const gridVertices = [];
+    const stepX = (maxX - minX) / (gridResolution - 1);
+    const stepY = (maxY - minY) / (gridResolution - 1);
+
+    for (let i = 0; i < gridResolution; i++) {
+      for (let j = 0; j < gridResolution; j++) {
+        const x = minX + i * stepX;
+        const y = minY + j * stepY;
+        const z = this.interpolateHeight(x, y, points);
+        
+        gridVertices.push({ x, y, z, i, j });
+      }
+    }
+
+    // Generate triangles from grid
+    const terrainVertices = [];
+    
+    for (let i = 0; i < gridResolution - 1; i++) {
+      for (let j = 0; j < gridResolution - 1; j++) {
+        // Get four corners of current grid cell
+        const v1 = gridVertices[i * gridResolution + j];           // bottom-left
+        const v2 = gridVertices[(i + 1) * gridResolution + j];     // bottom-right
+        const v3 = gridVertices[(i + 1) * gridResolution + (j + 1)]; // top-right
+        const v4 = gridVertices[i * gridResolution + (j + 1)];     // top-left
+
+        // First triangle: v1, v2, v3
+        terrainVertices.push(v1.x, v1.y, v1.z);
+        terrainVertices.push(v2.x, v2.y, v2.z);
+        terrainVertices.push(v3.x, v3.y, v3.z);
+
+        // Second triangle: v1, v3, v4
+        terrainVertices.push(v1.x, v1.y, v1.z);
+        terrainVertices.push(v3.x, v3.y, v3.z);
+        terrainVertices.push(v4.x, v4.y, v4.z);
+      }
+    }
+
+    return terrainVertices;
+  }
+
+  // Interpolate height at given x,y position using enhanced inverse distance weighting
+  static interpolateHeight(x, y, points, maxDistance = 1.0) {
+    let totalWeight = 0;
+    let weightedSum = 0;
+    let minDistance = Infinity;
+    let closestPointZ = -1;
+    
+    // Calculate weights and find closest point
+    const weights = [];
     points.forEach(point => {
-      // 각 포인트마다 정육면체 생성
-      cubeTriangles.forEach(triangle => {
-        triangle.forEach(vertexIndex => {
-          const localVertex = cubeVertices[vertexIndex];
-          pointVertices.push(
-            point.x + localVertex[0] * cubeSize,
-            point.y + localVertex[1] * cubeSize,
-            point.z + localVertex[2] * cubeSize
-          );
-        });
-      });
+      const dx = x - point.x;
+      const dy = y - point.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Track closest point
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestPointZ = point.z;
+      }
+      
+      // Enhanced inverse distance weighting with adaptive power
+      let weight;
+      if (distance < 0.001) {
+        // Very close to a point, return that point's height
+        return point.z;
+      } else if (distance < 0.1) {
+        // Close points have very high influence
+        weight = 1 / Math.pow(distance, 3);
+      } else if (distance < 0.5) {
+        // Medium distance points
+        weight = 1 / Math.pow(distance, 2);
+      } else {
+        // Far points have reduced influence
+        weight = 1 / Math.pow(distance, 1.5);
+      }
+      
+      weights.push({ weight, z: point.z, distance });
+      totalWeight += weight;
+      weightedSum += point.z * weight;
     });
-
-    return pointVertices;
+    
+    // If we're very close to any point, return that point's height
+    if (minDistance < 0.01) {
+      return closestPointZ;
+    }
+    
+    // Calculate base interpolated height
+    let interpolatedHeight = -1; // Default boundary value
+    if (totalWeight > 0) {
+      interpolatedHeight = weightedSum / totalWeight;
+    }
+    
+    // Apply boundary blending - interpolate to -1 near edges
+    const centerDistance = Math.sqrt(x * x + y * y);
+    const boundaryDistance = Math.sqrt(2); // Distance to corner
+    const fadeStart = 0.6; // Start fading earlier
+    
+    if (centerDistance > fadeStart) {
+      const fadeFactor = Math.min(1, (centerDistance - fadeStart) / (boundaryDistance - fadeStart));
+      // Linear interpolation between interpolated height and -1 (boundary value)
+      interpolatedHeight = interpolatedHeight * (1 - fadeFactor) + (-1) * fadeFactor;
+    }
+    
+    return interpolatedHeight;
   }
 
   // Generate coordinate axes
