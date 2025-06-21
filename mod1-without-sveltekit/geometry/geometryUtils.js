@@ -121,6 +121,8 @@ export class GeometryUtils {
 
     // RBF 보간을 위한 파라미터
     const sigma = 0.3; // RBF의 스무딩 파라미터
+    const sigmaSquared = sigma * sigma;
+    const weightCache = new Map(); // Precomputed weights cache
 
     // 각 격자 점에 대해 RBF 보간 수행
     for (let gridVertex of gridVertices) {
