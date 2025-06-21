@@ -151,7 +151,8 @@ async function init() {
 
   // Render loop
   function frame() {
-    if (!wireframeVertexBuffer) {
+    // Ensure both wireframeVertexBuffer and terrainVertexBuffer are available before proceeding.
+    if (!wireframeVertexBuffer || !terrainVertexBuffer) {
       requestAnimationFrame(frame);
       return;
     }
