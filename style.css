@@ -36,3 +36,23 @@ body {
     height: calc(100% - 32px); /* Full height minus toolbar */
     box-sizing: border-box;
 }
+#floatingManual {
+    position: absolute;
+    top: 32px; /* roughly toolbar height */
+    right: 0;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+    color: #fff;
+    z-index: 10;
+    font-size: 14px;
+}
+#floatingManual p {
+    margin: 0;
+    padding: 4px 0;
+}
+#floatingManual p:first-child {
+    margin-top: 0;
+}
+#floatingManual p:last-child {
+    margin-bottom: 0;
+}
