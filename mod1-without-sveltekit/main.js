@@ -216,10 +216,9 @@ async function init() {
     pass.setVertexBuffer(0, wireframeVertexBuffer);
     pass.draw(numWireframeVertices, 1, 0, 0);
 
-    // Render terrain
+    // Render terrain with height-based coloring
     if (terrainVertexBuffer && numTerrainVertices > 0) {
-      // pass.setPipeline(pipelines.face);
-      pass.setPipeline(pipelines.wireframe);
+      pass.setPipeline(pipelines.terrain);
       pass.setBindGroup(0, bindGroup);
       pass.setVertexBuffer(0, terrainVertexBuffer);
       pass.draw(numTerrainVertices, 1, 0, 0);

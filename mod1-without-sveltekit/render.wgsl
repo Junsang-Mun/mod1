@@ -12,10 +12,25 @@ struct VertexOutput {
   @builtin(position) position: vec4<f32>,
 };
 
+// 지형용 확장된 버텍스 출력 구조체
+struct TerrainVertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) worldHeight: f32,
+};
+
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
   var out: VertexOutput;
   out.position = uniforms.mvp * vec4<f32>(input.pos, 1.0);
+  return out;
+}
+
+// 지형용 버텍스 셰이더
+@vertex
+fn vs_terrain(input: VertexInput) -> TerrainVertexOutput {
+  var out: TerrainVertexOutput;
+  out.position = uniforms.mvp * vec4<f32>(input.pos, 1.0);
+  out.worldHeight = input.pos.z; // Z 좌표를 높이로 사용
   return out;
 }
 
@@ -32,6 +47,31 @@ fn fs_main_face() -> @location(0) vec4<f32> {
 @fragment
 fn fs_main_point() -> @location(0) vec4<f32> {
   return vec4<f32>(1.0, 0.0, 0.0, 1.0); // 빨간색 포인트
+}
+
+// 높이 기반 색상 계산 지형 프래그먼트 셰이더
+@fragment
+fn fs_terrain(input: TerrainVertexOutput) -> @location(0) vec4<f32> {
+  let height = input.worldHeight;
+
+  // 높이가 -1.0이면 파란색 (물)
+  if (height < -0.99) {
+    return vec4<f32>(0.0, 0.0, 1.0, 1.0);
+  }
+  
+  // 높이가 -1.0보다 크면 갈색에서 초록색으로 그라데이션
+  // 높이 범위 -1.0~1.0을 0.0~1.0으로 정규화
+  let normalizedHeight = clamp((height + 1.0) / 2.0, 0.0, 1.0);
+  
+  // 갈색 (낮은 높이)
+  let brownColor = vec3<f32>(0.6, 0.4, 0.2);
+  // 초록색 (높은 높이) 
+  let greenColor = vec3<f32>(0.2, 0.8, 0.2);
+  
+  // 높이에 따라 두 색상을 보간
+  let color = mix(brownColor, greenColor, normalizedHeight);
+  
+  return vec4<f32>(color, 1.0);
 }
 
 @fragment
