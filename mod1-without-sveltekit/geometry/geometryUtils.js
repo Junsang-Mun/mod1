@@ -81,11 +81,12 @@ export class GeometryUtils {
       for (let j = 0; j < gridResolution; j++) {
         const x = minX + i * stepX;
         const y = minY + j * stepY;
-        const z = this.interpolateHeight(x, y, points);
-        
+        const z = -1;
         gridVertices.push({ x, y, z, i, j });
       }
     }
+
+    this.addHeightToTerrain(gridVertices, points);
 
     // Generate triangles from grid
     const terrainVertices = [];
@@ -113,70 +114,50 @@ export class GeometryUtils {
     return terrainVertices;
   }
 
-  // Interpolate height at given x,y position using enhanced inverse distance weighting
-  static interpolateHeight(x, y, points, maxDistance = 1.0) {
-    let totalWeight = 0;
-    let weightedSum = 0;
-    let minDistance = Infinity;
-    let closestPointZ = -1;
-    
-    // Calculate weights and find closest point
-    const weights = [];
-    points.forEach(point => {
-      const dx = x - point.x;
-      const dy = y - point.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+  static addHeightToTerrain(gridVertices, points) {
+    if (!points || points.length === 0) {
+      return;
+    }
+
+    // RBF 보간을 위한 파라미터
+    const sigma = 0.3; // RBF의 스무딩 파라미터
+
+    // 각 격자 점에 대해 RBF 보간 수행
+    for (let gridVertex of gridVertices) {
+      let numerator = 0;
+      let denominator = 0;
       
-      // Track closest point
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPointZ = point.z;
+      // 기존 격자점의 z값을 초기 가중치로 추가
+      const originalZ = gridVertex.z;
+      const originalWeight = 1.0; // 기존 값의 기본 가중치
+      
+      numerator += originalWeight * originalZ;
+      denominator += originalWeight;
+
+      // 모든 알려진 점들로부터의 영향을 계산
+      for (let point of points) {
+        // 거리 계산 (2D 거리, x, y만 사용)
+        const dx = gridVertex.x - point.x;
+        const dy = gridVertex.y - point.y;
+        const distanceSquared = (dx * dx + dy * dy);
+
+        // RBF 함수: Gaussian 함수 사용
+        // w(r) = exp(-r²/σ²)
+        const weight = Math.exp(-(distanceSquared) / (sigma * sigma));
+
+        // 가중 평균 계산
+        numerator += weight * point.z;
+        denominator += weight;
       }
-      
-      // Enhanced inverse distance weighting with adaptive power
-      let weight;
-      if (distance < 0.001) {
-        // Very close to a point, return that point's height
-        return point.z;
-      } else if (distance < 0.1) {
-        // Close points have very high influence
-        weight = 1 / Math.pow(distance, 3);
-      } else if (distance < 0.5) {
-        // Medium distance points
-        weight = 1 / Math.pow(distance, 2);
+
+      // 보간된 높이값 적용
+      if (denominator > 0) {
+        gridVertex.z = numerator / denominator;
       } else {
-        // Far points have reduced influence
-        weight = 1 / Math.pow(distance, 1.5);
+        // 모든 가중치가 0인 경우 (매우 드문 경우)
+        gridVertex.z = originalZ; // 기존 값 유지
       }
-      
-      weights.push({ weight, z: point.z, distance });
-      totalWeight += weight;
-      weightedSum += point.z * weight;
-    });
-    
-    // If we're very close to any point, return that point's height
-    if (minDistance < 0.01) {
-      return closestPointZ;
     }
-    
-    // Calculate base interpolated height
-    let interpolatedHeight = -1; // Default boundary value
-    if (totalWeight > 0) {
-      interpolatedHeight = weightedSum / totalWeight;
-    }
-    
-    // Apply boundary blending - interpolate to -1 near edges
-    const centerDistance = Math.sqrt(x * x + y * y);
-    const boundaryDistance = Math.sqrt(2); // Distance to corner
-    const fadeStart = 0.6; // Start fading earlier
-    
-    if (centerDistance > fadeStart) {
-      const fadeFactor = Math.min(1, (centerDistance - fadeStart) / (boundaryDistance - fadeStart));
-      // Linear interpolation between interpolated height and -1 (boundary value)
-      interpolatedHeight = interpolatedHeight * (1 - fadeFactor) + (-1) * fadeFactor;
-    }
-    
-    return interpolatedHeight;
   }
 
   // Generate coordinate axes
