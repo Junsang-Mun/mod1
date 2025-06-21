@@ -46,10 +46,8 @@ async function init() {
 
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
-  let bottomFaceVertexBuffer = null;
-  let numBottomFaceVertices = 0;
-  let pointVertexBuffer = null;
-  let numPoints = 0;
+  let terrainVertexBuffer = null;
+  let numTerrainVertices = 0;
 
   // 좌표축 버퍼들
   let xAxisVertexBuffer = null;
@@ -91,30 +89,24 @@ async function init() {
     const { points } = loadMod1ToJson(text, file.name);
     console.log('points', points);
 
-    // Generate point geometry
-    const pointVertices = GeometryUtils.generatePointCubes(points);
-    numPoints = pointVertices.length / 3;
+    // Generate terrain geometry from points
+    const terrainVertices = GeometryUtils.generateTerrain(points);
+    numTerrainVertices = terrainVertices.length / 3;
 
-    // Create point vertex buffer
-    if (pointVertices.length > 0) {
-      const pointData = new Float32Array(pointVertices);
-      pointVertexBuffer = webgpu.createVertexBuffer(pointData);
+    // Create terrain vertex buffer
+    if (terrainVertices.length > 0) {
+      const terrainData = new Float32Array(terrainVertices);
+      terrainVertexBuffer = webgpu.createVertexBuffer(terrainData);
     }
 
     // Generate cube geometry
     const wireframeVertices = GeometryUtils.generateCubeEdges(2);
-    const bottomFaceVertices = GeometryUtils.generateCubeBottomFace(2);
 
     numWireframeVertices = wireframeVertices.length / 3;
-    numBottomFaceVertices = bottomFaceVertices.length / 3;
 
     // Create wireframe vertex buffer
     const wireframeData = new Float32Array(wireframeVertices);
     wireframeVertexBuffer = webgpu.createVertexBuffer(wireframeData);
-
-    // Create bottom face vertex buffer
-    const bottomFaceData = new Float32Array(bottomFaceVertices);
-    bottomFaceVertexBuffer = webgpu.createVertexBuffer(bottomFaceData);
 
     // Update MVP matrix
     const mvpMatrix = computeMVPMatrix();
@@ -159,7 +151,8 @@ async function init() {
 
   // Render loop
   function frame() {
-    if (!wireframeVertexBuffer || !bottomFaceVertexBuffer) {
+    // Ensure both wireframeVertexBuffer and terrainVertexBuffer are available before proceeding.
+    if (!wireframeVertexBuffer || !terrainVertexBuffer) {
       requestAnimationFrame(frame);
       return;
     }
@@ -204,24 +197,18 @@ async function init() {
     pass.setVertexBuffer(0, zAxisVertexBuffer);
     pass.draw(numAxisVertices, 1, 0, 0);
 
-    // Render bottom face
-    pass.setPipeline(pipelines.face);
-    pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, bottomFaceVertexBuffer);
-    pass.draw(numBottomFaceVertices, 1, 0, 0);
-
     // Render wireframe
     pass.setPipeline(pipelines.wireframe);
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, wireframeVertexBuffer);
     pass.draw(numWireframeVertices, 1, 0, 0);
 
-    // Render points
-    if (pointVertexBuffer && numPoints > 0) {
-      pass.setPipeline(pipelines.point);
+    // Render terrain with height-based coloring
+    if (terrainVertexBuffer && numTerrainVertices > 0) {
+      pass.setPipeline(pipelines.terrain);
       pass.setBindGroup(0, bindGroup);
-      pass.setVertexBuffer(0, pointVertexBuffer);
-      pass.draw(numPoints, 1, 0, 0);
+      pass.setVertexBuffer(0, terrainVertexBuffer);
+      pass.draw(numTerrainVertices, 1, 0, 0);
     }
 
     pass.end();

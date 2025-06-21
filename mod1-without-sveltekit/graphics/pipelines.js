@@ -124,12 +124,37 @@ export class PipelineFactory {
     });
   }
 
+  // Create terrain render pipeline with height-based coloring
+  createTerrainPipeline(shaderModule, bindGroupLayout) {
+    return this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_terrain",
+        buffers: [this.createVertexBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_terrain",
+        targets: [{ format: this.format }],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "none",
+      },
+      depthStencil: this.createDepthStencilState(),
+    });
+  }
+
   // Create all pipelines at once
   createAllPipelines(shaderModule, bindGroupLayout) {
     return {
       wireframe: this.createWireframePipeline(shaderModule, bindGroupLayout),
       face: this.createFacePipeline(shaderModule, bindGroupLayout),
       point: this.createPointPipeline(shaderModule, bindGroupLayout),
+      terrain: this.createTerrainPipeline(shaderModule, bindGroupLayout),
       xAxis: this.createAxisPipeline(shaderModule, bindGroupLayout, "fs_main_x_axis"),
       yAxis: this.createAxisPipeline(shaderModule, bindGroupLayout, "fs_main_y_axis"),
       zAxis: this.createAxisPipeline(shaderModule, bindGroupLayout, "fs_main_z_axis"),
