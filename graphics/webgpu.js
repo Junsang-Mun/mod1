@@ -4,6 +4,7 @@ export class WebGPUSetup {
     this.device = null;
     this.context = null;
     this.format = null;
+    this.canvas = null;
   }
 
   // Initialize WebGPU
@@ -19,18 +20,26 @@ export class WebGPUSetup {
     this.device = await adapter.requestDevice();
     this.context = canvas.getContext("webgpu");
     this.format = navigator.gpu.getPreferredCanvasFormat();
-    
-    this.context.configure({ 
-      device: this.device, 
-      format: this.format, 
-      alphaMode: "opaque" 
-    });
+    this.canvas = canvas;
+
+    this.configureContext();
 
     return {
       device: this.device,
       context: this.context,
-      format: this.format
+      format: this.format,
     };
+  }
+
+  // Configure context (can be called separately when canvas size changes)
+  configureContext() {
+    if (!this.context || !this.device) return;
+
+    this.context.configure({
+      device: this.device,
+      format: this.format,
+      alphaMode: "opaque",
+    });
   }
 
   // Create shader module
@@ -56,7 +65,7 @@ export class WebGPUSetup {
   createBindGroup(layout, entries) {
     return this.device.createBindGroup({
       layout: layout,
-      entries: entries
+      entries: entries,
     });
   }
 
@@ -86,4 +95,4 @@ export class WebGPUSetup {
   submitCommands(commandBuffers) {
     this.device.queue.submit(commandBuffers);
   }
-} 
+}
