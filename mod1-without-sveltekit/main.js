@@ -46,8 +46,6 @@ async function init() {
 
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
-  let bottomFaceVertexBuffer = null;
-  let numBottomFaceVertices = 0;
   let terrainVertexBuffer = null;
   let numTerrainVertices = 0;
 
@@ -103,18 +101,12 @@ async function init() {
 
     // Generate cube geometry
     const wireframeVertices = GeometryUtils.generateCubeEdges(2);
-    const bottomFaceVertices = GeometryUtils.generateCubeBottomFace(2);
 
     numWireframeVertices = wireframeVertices.length / 3;
-    numBottomFaceVertices = bottomFaceVertices.length / 3;
 
     // Create wireframe vertex buffer
     const wireframeData = new Float32Array(wireframeVertices);
     wireframeVertexBuffer = webgpu.createVertexBuffer(wireframeData);
-
-    // Create bottom face vertex buffer
-    const bottomFaceData = new Float32Array(bottomFaceVertices);
-    bottomFaceVertexBuffer = webgpu.createVertexBuffer(bottomFaceData);
 
     // Update MVP matrix
     const mvpMatrix = computeMVPMatrix();
@@ -159,7 +151,7 @@ async function init() {
 
   // Render loop
   function frame() {
-    if (!wireframeVertexBuffer || !bottomFaceVertexBuffer) {
+    if (!wireframeVertexBuffer) {
       requestAnimationFrame(frame);
       return;
     }
@@ -203,12 +195,6 @@ async function init() {
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, zAxisVertexBuffer);
     pass.draw(numAxisVertices, 1, 0, 0);
-
-    // Render bottom face
-    pass.setPipeline(pipelines.face);
-    pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, bottomFaceVertexBuffer);
-    pass.draw(numBottomFaceVertices, 1, 0, 0);
 
     // Render wireframe
     pass.setPipeline(pipelines.wireframe);
