@@ -5,6 +5,10 @@ import { WebGPUSetup } from "./graphics/webgpu.js";
 import { PipelineFactory } from "./graphics/pipelines.js";
 import { GeometryUtils } from "./geometry/geometryUtils.js";
 
+// Store resize observer and rendering variables globally
+let resizeObserver;
+let depthTexture;
+
 window.addEventListener("DOMContentLoaded", () => {
   init().catch((err) => console.error("Initialization error:", err));
 });
@@ -13,9 +17,62 @@ async function init() {
   const canvas = document.getElementById("gpu-canvas");
   const mod1Input = document.getElementById("mod1Input");
 
+  // Add resize handler to window and orientation change for mobile devices
+  window.addEventListener("resize", updateCanvasSize);
+  window.addEventListener("orientationchange", updateCanvasSize);
+
   // Initialize WebGPU
   const webgpu = new WebGPUSetup();
   const { device, context, format } = await webgpu.initialize(canvas);
+
+  // Set canvas size to actual size in device pixels
+  function updateCanvasSize() {
+    // Small delay to ensure dimensions are updated after orientation changes
+    setTimeout(() => {
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+
+      // Only update if size actually changed
+      if (
+        canvas.width !== Math.floor(rect.width * devicePixelRatio) ||
+        canvas.height !== Math.floor(rect.height * devicePixelRatio)
+      ) {
+        canvas.width = Math.floor(rect.width * devicePixelRatio);
+        canvas.height = Math.floor(rect.height * devicePixelRatio);
+
+        console.log(`Canvas resized to ${canvas.width}x${canvas.height}`);
+
+        // Reconfigure the WebGPU context when size changes
+        context.configure({
+          device: device,
+          format: format,
+          alphaMode: "opaque",
+        });
+
+        // Create new depth texture with current size
+        if (depthTexture) {
+          depthTexture.destroy();
+        }
+
+        depthTexture = device.createTexture({
+          size: [canvas.width, canvas.height],
+          format: "depth24plus",
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+
+        // Update MVP matrix for new aspect ratio
+        const mvpMatrix = computeMVPMatrix();
+        webgpu.writeBuffer(mvpBuffer, 0, mvpMatrix);
+      }
+    }, 100); // Small delay to ensure layout is complete
+  }
+
+  // Initial canvas size update
+  updateCanvasSize();
+
+  // Observe canvas container for size changes
+  resizeObserver = new ResizeObserver(updateCanvasSize);
+  resizeObserver.observe(canvas.parentElement || document.body);
 
   // Create shader module
   const shaderModule = await webgpu.createShaderModule("render.wgsl");
@@ -42,7 +99,10 @@ async function init() {
 
   // Create rendering pipelines
   const pipelineFactory = new PipelineFactory(device, format);
-  const pipelines = pipelineFactory.createAllPipelines(shaderModule, bindGroupLayout);
+  const pipelines = pipelineFactory.createAllPipelines(
+    shaderModule,
+    bindGroupLayout,
+  );
 
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
@@ -87,7 +147,7 @@ async function init() {
 
     const text = await file.text();
     const { points } = loadMod1ToJson(text, file.name);
-    console.log('points', points);
+    console.log("points", points);
 
     // Generate terrain geometry from points
     const terrainVertices = GeometryUtils.generateTerrain(points);
@@ -117,30 +177,32 @@ async function init() {
     const moveStep = 0.2;
     const rotateStep = 5; // degrees
     const zoomFactor = 0.1;
-    
+
     // Camera movement (WASD: horizontal movement, QE: vertical movement)
-    if (e.key === "w") camera.moveRelative(moveStep, 0, 0);     // Forward
-    else if (e.key === "s") camera.moveRelative(-moveStep, 0, 0);  // Backward
-    else if (e.key === "a") camera.moveRelative(0, -moveStep, 0);  // Left
-    else if (e.key === "d") camera.moveRelative(0, moveStep, 0);   // Right
-    else if (e.key === "q") camera.moveRelative(0, 0, -moveStep);  // Down
-    else if (e.key === "e") camera.moveRelative(0, 0, moveStep);   // Up
-    
+    if (e.key === "w")
+      camera.moveRelative(moveStep, 0, 0); // Forward
+    else if (e.key === "s")
+      camera.moveRelative(-moveStep, 0, 0); // Backward
+    else if (e.key === "a")
+      camera.moveRelative(0, -moveStep, 0); // Left
+    else if (e.key === "d")
+      camera.moveRelative(0, moveStep, 0); // Right
+    else if (e.key === "q")
+      camera.moveRelative(0, 0, -moveStep); // Down
+    else if (e.key === "e")
+      camera.moveRelative(0, 0, moveStep); // Up
     // Arrow keys: camera rotation and zoom
     else if (e.key === "ArrowLeft") {
       camera.rotation -= rotateStep;
       camera.updatePosition();
-    }
-    else if (e.key === "ArrowRight") {
+    } else if (e.key === "ArrowRight") {
       camera.rotation += rotateStep;
       camera.updatePosition();
-    }
-    else if (e.key === "ArrowUp") {
-      camera.zoom *= (1 + zoomFactor);
+    } else if (e.key === "ArrowUp") {
+      camera.zoom *= 1 + zoomFactor;
       camera.updatePosition();
-    }
-    else if (e.key === "ArrowDown") {
-      camera.zoom *= (1 - zoomFactor);
+    } else if (e.key === "ArrowDown") {
+      camera.zoom *= 1 - zoomFactor;
       camera.updatePosition();
     }
 
@@ -168,13 +230,7 @@ async function init() {
         },
       ],
       depthStencilAttachment: {
-        view: device
-          .createTexture({
-            size: [canvas.width, canvas.height],
-            format: "depth24plus",
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-          })
-          .createView(),
+        view: depthTexture.createView(),
         depthClearValue: 1.0,
         depthLoadOp: "clear",
         depthStoreOp: "store",
@@ -219,7 +275,7 @@ async function init() {
   // Initialize coordinate axes
   function initializeAxes() {
     const axes = GeometryUtils.generateAxes();
-    
+
     // Create axis vertex buffers
     xAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.xAxis));
     yAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.yAxis));
@@ -228,10 +284,25 @@ async function init() {
 
   // Initialize
   initializeAxes();
-  
+
   // Set initial MVP matrix
   const initialMvpMatrix = computeMVPMatrix();
   webgpu.writeBuffer(mvpBuffer, 0, initialMvpMatrix);
 
+  // Start render loop
   requestAnimationFrame(frame);
+
+  // Return cleanup function
+  return () => {
+    // Remove event listeners
+    window.removeEventListener("resize", updateCanvasSize);
+    window.removeEventListener("orientationchange", updateCanvasSize);
+
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+    }
+    if (depthTexture) {
+      depthTexture.destroy();
+    }
+  };
 }

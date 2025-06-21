@@ -33,6 +33,6 @@ body {
     top: 32px; /* roughly toolbar height */
     left: 0;
     width: 100%;
-    padding-top: 2em;
-    bottom: 0;
+    height: calc(100% - 32px); /* Full height minus toolbar */
+    box-sizing: border-box;
 }
