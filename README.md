@@ -20,14 +20,7 @@ Start the development server:
 ./start-dev-server.sh
 ```
 
-Or using Docker:
-
-```bash
-make build
-make up
-```
-
-Access the application at http://localhost:8081 when using Docker or http://localhost:8000 when using the development server.
+Access the application at http://localhost:8000 when using the development server.
 
 ### Loading Terrain
 
@@ -40,9 +33,8 @@ Access the application at http://localhost:8081 when using Docker or http://loca
   - **Arrow Keys**: Rotate camera (left/right) and zoom (up/down)
   - **WASD**: Move camera horizontally
   - **Q/E**: Move camera vertically
-  - **Right-click and drag**: Camera rotation
-  
-- **Simulation Modes**:
+
+- **Simulation Modes**: Not yet implemented
   - Select from dropdown to choose terrain modification or water addition
   - Left-click on the terrain to interact based on selected mode
 
