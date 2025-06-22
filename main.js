@@ -1,4 +1,4 @@
-import { loadMod1ToJson } from "./mod1Parser.js";
+import { loadMod1ToJson } from "./utils/mod1Parser.js";
 import { MatrixUtils } from "./utils/matrixUtils.js";
 import { Camera } from "./graphics/camera.js";
 import { WebGPUSetup } from "./graphics/webgpu.js";
