@@ -18,6 +18,12 @@ struct TerrainVertexOutput {
   @location(0) worldHeight: f32,
 };
 
+// 파티클용 확장된 버텍스 출력 구조체
+struct ParticleVertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) worldPos: vec3<f32>,
+};
+
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
   var out: VertexOutput;
@@ -31,6 +37,15 @@ fn vs_terrain(input: VertexInput) -> TerrainVertexOutput {
   var out: TerrainVertexOutput;
   out.position = uniforms.mvp * vec4<f32>(input.pos, 1.0);
   out.worldHeight = input.pos.z; // Z 좌표를 높이로 사용
+  return out;
+}
+
+// 파티클용 버텍스 셰이더
+@vertex
+fn vs_particle(input: VertexInput) -> ParticleVertexOutput {
+  var out: ParticleVertexOutput;
+  out.position = uniforms.mvp * vec4<f32>(input.pos, 1.0);
+  out.worldPos = input.pos; // 월드 위치 전달
   return out;
 }
 
@@ -87,4 +102,30 @@ fn fs_main_y_axis() -> @location(0) vec4<f32> {
 @fragment
 fn fs_main_z_axis() -> @location(0) vec4<f32> {
   return vec4<f32>(0.0, 0.0, 1.0, 1.0); // 파란색 Z축
+}
+
+// 파티클용 프래그먼트 셰이더 - 위치 기반 색상
+@fragment
+fn fs_particle(input: ParticleVertexOutput) -> @location(0) vec4<f32> {
+  let pos = input.worldPos;
+  
+  // 파티클의 크기에 따른 색상 변화 (중심에서 가장자리로)
+  let centerDistance = length(pos.xy);
+  
+  // 높이(Z)에 따른 기본 색상
+  let height = pos.z;
+  let normalizedHeight = clamp((height + 1.0) / 2.0, 0.0, 1.0);
+  
+  // 기본 색상: 높이에 따라 빨간색에서 주황색으로
+  let redColor = vec3<f32>(1.0, 0.2, 0.2);    // 낮은 높이
+  let orangeColor = vec3<f32>(1.0, 0.6, 0.2); // 높은 높이
+  
+  // 높이에 따른 색상 보간
+  let baseColor = mix(redColor, orangeColor, normalizedHeight);
+  
+  // 중심에서 가장자리로 갈수록 밝기 감소 (부드러운 효과)
+  let brightness = 1.0 - smoothstep(0.0, 0.05, centerDistance);
+  let finalColor = baseColor * mix(0.7, 1.0, brightness);
+  
+  return vec4<f32>(finalColor, 1.0);
 }

@@ -170,4 +170,40 @@ export class GeometryUtils {
       zAxis: [0.0, 0.0, 0.0, 0.0, 0.0, length]
     };
   }
+
+  // Generate cube faces for particle rendering (all 6 faces as triangles)
+  static generateCubeFaces(size = 1, center = [0, 0, 0]) {
+    const vertices = this.generateCube(size, center);
+    const faceVertices = [];
+
+    // Define faces as triangles (2 triangles per face)
+    const faces = [
+      // Front face (z = +halfSize)
+      [4, 5, 6], [4, 6, 7],
+      // Back face (z = -halfSize)  
+      [1, 0, 3], [1, 3, 2],
+      // Top face (y = +halfSize)
+      [3, 7, 6], [3, 6, 2],
+      // Bottom face (y = -halfSize)
+      [0, 1, 5], [0, 5, 4],
+      // Right face (x = +halfSize)
+      [1, 2, 6], [1, 6, 5],
+      // Left face (x = -halfSize)
+      [0, 4, 7], [0, 7, 3],
+    ];
+
+    // Convert face indices to vertices
+    for (const face of faces) {
+      for (const vertexIndex of face) {
+        faceVertices.push(...vertices[vertexIndex]);
+      }
+    }
+
+    return faceVertices;
+  }
+
+  // Generate single particle cube with faces (optimized for small size)
+  static generateParticleCube(size = 0.1, center = [0, 0, 0]) {
+    return this.generateCubeFaces(size, center);
+  }
 } 

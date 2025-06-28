@@ -109,6 +109,8 @@ async function init() {
   let numWireframeVertices = 0;
   let terrainVertexBuffer = null;
   let numTerrainVertices = 0;
+  let particleVertexBuffer = null;
+  let numParticleVertices = 0;
 
   // Initialize axes manager
   const axesManager = new AxesManager();
@@ -165,6 +167,12 @@ async function init() {
     // Create wireframe vertex buffer
     const wireframeData = new Float32Array(wireframeVertices);
     wireframeVertexBuffer = webgpu.createVertexBuffer(wireframeData);
+
+    // Generate particle geometry
+    const particleVertices = GeometryUtils.generateParticleCube(0.1, [0.5, 0.5, 0.5]);
+    numParticleVertices = particleVertices.length / 3;
+    const particleData = new Float32Array(particleVertices);
+    particleVertexBuffer = webgpu.createVertexBuffer(particleData);
 
     // Update MVP matrix
     const mvpMatrix = computeMVPMatrix();
@@ -265,6 +273,14 @@ async function init() {
       pass.setBindGroup(0, bindGroup);
       pass.setVertexBuffer(0, terrainVertexBuffer);
       pass.draw(numTerrainVertices, 1, 0, 0);
+    }
+
+    // Render particle
+    if (particleVertexBuffer && numParticleVertices > 0) {
+      pass.setPipeline(pipelines.particle);
+      pass.setBindGroup(0, bindGroup);
+      pass.setVertexBuffer(0, particleVertexBuffer);
+      pass.draw(numParticleVertices, 1, 0, 0);
     }
 
     pass.end();
