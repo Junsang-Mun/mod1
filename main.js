@@ -255,7 +255,7 @@ async function init() {
     // Update particle uniforms (MVP, time, gravity)
     const now = performance.now();
     const time = (now - startTime) * 0.001; // seconds
-    const gravity = -2.0; // or any value you want
+    const gravity = -9.8; // or any value you want
     const mvpMatrix = computeMVPMatrix();
     const uniformArray = new Float32Array(20);
     uniformArray.set(mvpMatrix, 0); // 16 floats
