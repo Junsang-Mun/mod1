@@ -4,6 +4,7 @@ import { Camera } from "./graphics/camera.js";
 import { WebGPUSetup } from "./graphics/webgpu.js";
 import { PipelineFactory } from "./graphics/pipelines.js";
 import { GeometryUtils } from "./geometry/geometryUtils.js";
+import { AxesManager } from "./graphics/axes.js";
 
 // Store resize observer and rendering variables globally
 let resizeObserver;
@@ -109,11 +110,8 @@ async function init() {
   let terrainVertexBuffer = null;
   let numTerrainVertices = 0;
 
-  // 좌표축 버퍼들
-  let xAxisVertexBuffer = null;
-  let yAxisVertexBuffer = null;
-  let zAxisVertexBuffer = null;
-  const numAxisVertices = 2; // 각 축은 선 하나이므로 2개 정점
+  // Initialize axes manager
+  const axesManager = new AxesManager();
 
   // Initialize camera
   const camera = new Camera();
@@ -238,20 +236,22 @@ async function init() {
     });
 
     // Render coordinate axes
+    const axesBuffers = axesManager.getBuffers();
+    
     pass.setPipeline(pipelines.xAxis);
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, xAxisVertexBuffer);
-    pass.draw(numAxisVertices, 1, 0, 0);
+    pass.setVertexBuffer(0, axesBuffers.xAxisVertexBuffer);
+    pass.draw(axesBuffers.numAxisVertices, 1, 0, 0);
 
     pass.setPipeline(pipelines.yAxis);
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, yAxisVertexBuffer);
-    pass.draw(numAxisVertices, 1, 0, 0);
+    pass.setVertexBuffer(0, axesBuffers.yAxisVertexBuffer);
+    pass.draw(axesBuffers.numAxisVertices, 1, 0, 0);
 
     pass.setPipeline(pipelines.zAxis);
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, zAxisVertexBuffer);
-    pass.draw(numAxisVertices, 1, 0, 0);
+    pass.setVertexBuffer(0, axesBuffers.zAxisVertexBuffer);
+    pass.draw(axesBuffers.numAxisVertices, 1, 0, 0);
 
     // Render wireframe
     pass.setPipeline(pipelines.wireframe);
@@ -273,17 +273,7 @@ async function init() {
   }
 
   // Initialize coordinate axes
-  function initializeAxes() {
-    const axes = GeometryUtils.generateAxes();
-
-    // Create axis vertex buffers
-    xAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.xAxis));
-    yAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.yAxis));
-    zAxisVertexBuffer = webgpu.createVertexBuffer(new Float32Array(axes.zAxis));
-  }
-
-  // Initialize
-  initializeAxes();
+  axesManager.initialize(webgpu);
 
   // Set initial MVP matrix
   const initialMvpMatrix = computeMVPMatrix();
