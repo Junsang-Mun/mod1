@@ -40,12 +40,25 @@ fn vs_terrain(input: VertexInput) -> TerrainVertexOutput {
   return out;
 }
 
-// 파티클용 버텍스 셰이더
+// --- Gravity-enabled Particle Vertex Shader ---
+// 확장된 Uniforms: 시간과 중력 추가
+struct ParticleUniforms {
+  mvp: mat4x4<f32>,
+  time: f32,
+  gravity: f32,
+};
+@group(0) @binding(0) var<uniform> particleUniforms: ParticleUniforms;
+
+// 파티클용 버텍스 셰이더 (중력 적용)
 @vertex
 fn vs_particle(input: VertexInput) -> ParticleVertexOutput {
   var out: ParticleVertexOutput;
-  out.position = uniforms.mvp * vec4<f32>(input.pos, 1.0);
-  out.worldPos = input.pos; // 월드 위치 전달
+  var pos = input.pos;
+  // 중력 공식: z = z0 + v0 * t + 0.5 * g * t^2 (v0=0 가정)
+  //  pos.z = pos.z + 0.5 * particleUniforms.gravity * particleUniforms.time * particleUniforms.time;
+  pos.z = pos.z + 0.001 * particleUniforms.gravity * particleUniforms.time * particleUniforms.time;
+  out.position = particleUniforms.mvp * vec4<f32>(pos, 1.0);
+  out.worldPos = pos;
   return out;
 }
 

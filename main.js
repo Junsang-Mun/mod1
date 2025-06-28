@@ -78,9 +78,6 @@ async function init() {
   // Create shader module
   const shaderModule = await webgpu.createShaderModule("render.wgsl");
 
-  // Create MVP buffer
-  const mvpBuffer = webgpu.createUniformBuffer(64);
-
   // Create bind group layout
   const bindGroupLayout = webgpu.createBindGroupLayout([
     {
@@ -90,12 +87,23 @@ async function init() {
     },
   ]);
 
+  // Create MVP buffer
+  const mvpBuffer = webgpu.createUniformBuffer(64);
+
   // Create bind group
   const bindGroup = webgpu.createBindGroup(bindGroupLayout, [
     {
       binding: 0,
       resource: { buffer: mvpBuffer },
     },
+  ]);
+
+  // --- Particle Uniform Buffer for Gravity ---
+  // Allocate 80 bytes (20 floats) for ParticleUniforms
+  const particleUniformBuffer = webgpu.createUniformBuffer(80);
+  // Create a separate bind group for the particle pipeline
+  const particleBindGroup = webgpu.createBindGroup(bindGroupLayout, [
+    { binding: 0, resource: { buffer: particleUniformBuffer } },
   ]);
 
   // Create rendering pipelines
@@ -218,6 +226,7 @@ async function init() {
   });
 
   // Render loop
+  let startTime = performance.now();
   function frame() {
     // Ensure both wireframeVertexBuffer and terrainVertexBuffer are available before proceeding.
     if (!wireframeVertexBuffer || !terrainVertexBuffer) {
@@ -243,9 +252,21 @@ async function init() {
       },
     });
 
+    // Update particle uniforms (MVP, time, gravity)
+    const now = performance.now();
+    const time = (now - startTime) * 0.001; // seconds
+    const gravity = -2.0; // or any value you want
+    const mvpMatrix = computeMVPMatrix();
+    const uniformArray = new Float32Array(20);
+    uniformArray.set(mvpMatrix, 0); // 16 floats
+    uniformArray[16] = time;
+    uniformArray[17] = gravity;
+    // [18] and [19] are padding
+    webgpu.writeBuffer(particleUniformBuffer, 0, uniformArray);
+
     // Render coordinate axes
     const axesBuffers = axesManager.getBuffers();
-    
+
     pass.setPipeline(pipelines.xAxis);
     pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, axesBuffers.xAxisVertexBuffer);
@@ -278,7 +299,7 @@ async function init() {
     // Render particle
     if (particleVertexBuffer && numParticleVertices > 0) {
       pass.setPipeline(pipelines.particle);
-      pass.setBindGroup(0, bindGroup);
+      pass.setBindGroup(0, particleBindGroup);
       pass.setVertexBuffer(0, particleVertexBuffer);
       pass.draw(numParticleVertices, 1, 0, 0);
     }
