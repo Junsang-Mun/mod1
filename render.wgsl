@@ -59,8 +59,8 @@ fn vs_particle(input: VertexInput) -> ParticleVertexOutput {
   // 가속도 공식: p = p0 + v0 * t + 0.5 * a * t^2 (v0=0 가정)
   // 0.001는 time scale 조절용 상수
   // 3차원 가속도 벡터를 모든 축에 적용
-  let timeSquared = 0.001 * particleUniforms.time * particleUniforms.time;
-  let displacement = 0.5 * particleUniforms.acceleration * timeSquared;
+  let timeSquared = particleUniforms.time * particleUniforms.time;
+  let displacement = 0.001 * 0.5 * particleUniforms.acceleration * timeSquared;
   
   pos = pos + displacement;
   
