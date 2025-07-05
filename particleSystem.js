@@ -199,8 +199,8 @@ export class GPUParticleSystem {
     floatView[2] = gravity[0];           // gravity.x: f32 (8-11 바이트)
     floatView[3] = gravity[1];           // gravity.y: f32 (12-15 바이트)
     floatView[4] = gravity[2];           // gravity.z: f32 (16-19 바이트)
-    floatView[5] = 0.8;                  // restitution: f32 (20-23 바이트)
-    floatView[6] = 0.9;                  // friction: f32 (24-27 바이트)
+    floatView[5] = 0.0;                  // restitution: f32 (20-23 바이트) - 경계 충돌 시 멈춤
+    floatView[6] = 0.95;                 // friction: f32 (24-27 바이트) - 마찰 증가
     uintView[7] = this.gridSize;         // gridSize: u32 (28-31 바이트)
     floatView[8] = 0.2;                  // cellSize: f32 (32-35 바이트)
     floatView[9] = 1.0;                  // worldBounds.x: f32 (36-39 바이트)
@@ -230,29 +230,50 @@ export class GPUParticleSystem {
   simulate(commandEncoder) {
     if (this.numParticles === 0) return;
     
-    const computePass = commandEncoder.beginComputePass();
+    // 컴퓨트 파이프라인이 초기화되지 않은 경우 건너뛰기
+    if (!this.clearGridPipeline || !this.assignParticlesPipeline || 
+        !this.updatePhysicsPipeline || !this.detectCollisionsPipeline) {
+      console.warn('컴퓨트 파이프라인이 초기화되지 않았습니다. 물리 시뮬레이션을 건너뜁니다.');
+      return;
+    }
+    
+    const computePass = commandEncoder.beginComputePass({
+      label: 'ParticlePhysicsComputePass'
+    });
     
     // 1단계: 그리드 초기화
     computePass.setPipeline(this.clearGridPipeline);
     computePass.setBindGroup(0, this.bindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(this.gridSize * this.gridSize * this.gridSize / 32));
+    const gridWorkgroups = Math.ceil(this.gridSize * this.gridSize * this.gridSize / 32);
+    computePass.dispatchWorkgroups(gridWorkgroups);
     
     // 2단계: 파티클을 그리드에 배치
     computePass.setPipeline(this.assignParticlesPipeline);
     computePass.setBindGroup(0, this.bindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(this.numParticles / 32));
+    const particleWorkgroups = Math.ceil(this.numParticles / 32);
+    computePass.dispatchWorkgroups(particleWorkgroups);
     
     // 3단계: 물리 업데이트
     computePass.setPipeline(this.updatePhysicsPipeline);
     computePass.setBindGroup(0, this.bindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(this.numParticles / 32));
+    computePass.dispatchWorkgroups(particleWorkgroups);
     
     // 4단계: 충돌 감지 및 응답
     computePass.setPipeline(this.detectCollisionsPipeline);
     computePass.setBindGroup(0, this.bindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(this.numParticles / 32));
+    computePass.dispatchWorkgroups(particleWorkgroups);
     
     computePass.end();
+    
+    // 디버깅: 물리 시뮬레이션 실행 정보 (가끔 출력)
+    if (Math.random() < 0.01) { // 1% 확률로 출력
+      console.log('물리 시뮬레이션 단계 완료:', {
+        particles: this.numParticles,
+        gridWorkgroups: gridWorkgroups,
+        particleWorkgroups: particleWorkgroups,
+        gridSize: this.gridSize
+      });
+    }
   }
   
   // 파티클 데이터 읽기 (렌더링용)

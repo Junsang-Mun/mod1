@@ -132,10 +132,6 @@ async function init() {
   // --- Particle Uniform Buffer for Gravity ---
   // Allocate 80 bytes (20 floats) for ParticleUniforms
   const particleUniformBuffer = webgpu.createUniformBuffer(80);
-  // Create a separate bind group for the particle pipeline
-  const particleBindGroup = webgpu.createBindGroup(bindGroupLayout, [
-    { binding: 0, resource: { buffer: particleUniformBuffer } },
-  ]);
 
   // Create rendering pipelines
   const pipelineFactory = new PipelineFactory(device, format);
@@ -214,8 +210,6 @@ async function init() {
   let numWireframeVertices = 0;
   let terrainVertexBuffer = null;
   let numTerrainVertices = 0;
-  let particleVertexBuffer = null;
-  let numParticleVertices = 0;
 
   // Initialize axes manager
   const axesManager = new AxesManager();
@@ -269,12 +263,6 @@ async function init() {
     // Create wireframe vertex buffer
     const wireframeData = new Float32Array(wireframeVertices);
     wireframeVertexBuffer = webgpu.createVertexBuffer(wireframeData);
-
-    // Generate particle geometry (기존 단일 파티클)
-    const particleVertices = GeometryUtils.generateParticleCube(0.1, [0.5, 0.5, 0.5]);
-    numParticleVertices = particleVertices.length / 3;
-    const particleData = new Float32Array(particleVertices);
-    particleVertexBuffer = webgpu.createVertexBuffer(particleData);
 
     // GPU 파티클 시스템 초기화
     if (!gpuParticleSystem) {
@@ -480,7 +468,7 @@ async function init() {
       },
     });
 
-    // Update particle uniforms (MVP, acceleration vector, time) - 기존 단일 파티클용
+    // Update particle uniforms (MVP, acceleration vector, time) - GPU 파티클용
     const time = (now - startTime) * 0.001; // seconds
     
     // 3차원 가속도 벡터 설정 (x, y, z) - 단위: m/s²
@@ -538,14 +526,6 @@ async function init() {
       pass.setBindGroup(0, bindGroup);
       pass.setVertexBuffer(0, terrainVertexBuffer);
       pass.draw(numTerrainVertices, 1, 0, 0);
-    }
-
-    // Render particle (기존 단일 파티클)
-    if (particleVertexBuffer && numParticleVertices > 0) {
-      pass.setPipeline(pipelines.particle);
-      pass.setBindGroup(0, particleBindGroup);
-      pass.setVertexBuffer(0, particleVertexBuffer);
-      pass.draw(numParticleVertices, 1, 0, 0);
     }
 
     // Render GPU particles (인스턴싱) - 다른 객체들 이후에 렌더링

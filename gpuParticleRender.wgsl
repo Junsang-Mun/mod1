@@ -42,16 +42,9 @@ fn vs_main(input: VertexInput) -> VertexOutput {
   // 버텍스 위치를 파티클 반지름에 맞춰 스케일링
   let scaledPos = input.pos * particle.radius * 2.0;
   
-  // render.wgsl의 vs_particle 방식: 시간 기반 가속도 적용
-  // 가속도 공식: p = p0 + v0 * t + 0.5 * a * t^2 (v0=0 가정)
-  let timeSquared = uniforms.time * uniforms.time;
-  let displacement = 0.001 * 0.5 * uniforms.acceleration * timeSquared;
-  
-  // 초기 위치에 시간 기반 변위를 더함
-  var pos = particle.position + displacement;
-  
-  // 파티클 위치로 이동
-  let worldPos = scaledPos + pos;
+  // 물리 시뮬레이션에서 계산된 실제 파티클 위치 사용
+  // (시간 기반 가속도 계산 제거 - 물리 시뮬레이션에서 이미 처리됨)
+  let worldPos = scaledPos + particle.position;
   
   out.position = uniforms.mvp * vec4<f32>(worldPos, 1.0);
   out.worldPos = worldPos;
