@@ -68,8 +68,33 @@ async function init() {
     }, 100); // Small delay to ensure layout is complete
   }
 
-  // Initial canvas size update
-  updateCanvasSize();
+  // Initial canvas size setup (synchronous for initialization)
+  function initializeCanvasSize() {
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = Math.floor(rect.width * devicePixelRatio);
+    canvas.height = Math.floor(rect.height * devicePixelRatio);
+
+    console.log(`Canvas initialized to ${canvas.width}x${canvas.height}`);
+
+    // Configure the WebGPU context
+    context.configure({
+      device: device,
+      format: format,
+      alphaMode: "opaque",
+    });
+
+    // Create initial depth texture
+    depthTexture = device.createTexture({
+      size: [canvas.width, canvas.height],
+      format: "depth24plus",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+  }
+
+  // Initial canvas size initialization (synchronous)
+  initializeCanvasSize();
 
   // Observe canvas container for size changes
   resizeObserver = new ResizeObserver(updateCanvasSize);
@@ -148,13 +173,11 @@ async function init() {
     return mvp;
   }
 
-  // Handle mod1 file input
-  mod1Input.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const text = await file.text();
-    const { points } = loadMod1ToJson(text, file.name);
+  /**
+   * Load and process mod1 file data
+   */
+  async function loadMod1File(text, fileName) {
+    const { points } = loadMod1ToJson(text, fileName);
     console.log("points", points);
 
     // Generate terrain geometry from points
@@ -169,7 +192,6 @@ async function init() {
 
     // Generate cube geometry
     const wireframeVertices = GeometryUtils.generateCubeEdges(2);
-
     numWireframeVertices = wireframeVertices.length / 3;
 
     // Create wireframe vertex buffer
@@ -185,6 +207,32 @@ async function init() {
     // Update MVP matrix
     const mvpMatrix = computeMVPMatrix();
     webgpu.writeBuffer(mvpBuffer, 0, mvpMatrix);
+  }
+
+  /**
+   * Automatically load default mod1 file on initialization
+   */
+  async function loadDefaultMod1() {
+    try {
+      const response = await fetch('./assets/demo1.mod1');
+      if (!response.ok) {
+        throw new Error(`Failed to load demo1.mod1: ${response.status}`);
+      }
+      const text = await response.text();
+      await loadMod1File(text, 'demo1.mod1');
+      console.log('Default mod1 file loaded successfully');
+    } catch (error) {
+      console.warn('Failed to load default mod1 file:', error);
+    }
+  }
+
+  // Handle mod1 file input
+  mod1Input.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const text = await file.text();
+    await loadMod1File(text, file.name);
   });
 
   window.addEventListener("keydown", (e) => {
@@ -228,8 +276,8 @@ async function init() {
   // Render loop
   let startTime = performance.now();
   function frame() {
-    // Ensure both wireframeVertexBuffer and terrainVertexBuffer are available before proceeding.
-    if (!wireframeVertexBuffer || !terrainVertexBuffer) {
+    // Ensure all required resources are available before proceeding.
+    if (!wireframeVertexBuffer || !terrainVertexBuffer || !depthTexture) {
       requestAnimationFrame(frame);
       return;
     }
@@ -328,6 +376,9 @@ async function init() {
 
   // Initialize coordinate axes
   axesManager.initialize(webgpu);
+
+  // Load default mod1 file automatically
+  await loadDefaultMod1();
 
   // Set initial MVP matrix
   const initialMvpMatrix = computeMVPMatrix();
