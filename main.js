@@ -298,33 +298,12 @@ async function init() {
     gpuParticleSystem.updateTerrain(terrainHeightData, 50);
 
     // 초기 파티클 추가 - 더 넓게 분산 배치 (크기 증가)
-    gpuParticleSystem.addParticle([-0.8, -0.8, 1.8], [0, 0, 0], 0.15);
-    gpuParticleSystem.addParticle([0.8, -0.8, 1.8], [0, 0, 0], 0.15);
-    gpuParticleSystem.addParticle([0.0, 0.0, 1.8], [0, 0, 0], 0.15);
-    gpuParticleSystem.addParticle([-0.8, 0.8, 1.8], [0, 0, 0], 0.15);
-    gpuParticleSystem.addParticle([0.8, 0.8, 1.8], [0, 0, 0], 0.15);
+    gpuParticleSystem.addParticle([-0.8, -0.8, 0.8]);
+    gpuParticleSystem.addParticle([0.8, -0.8, 0.8]);
+    gpuParticleSystem.addParticle([0.0, 0.0, 0.8]);
+    gpuParticleSystem.addParticle([-0.8, 0.8, 0.8]);
+    gpuParticleSystem.addParticle([0.8, 0.8, 0.8]);
     
-    console.log('5개 파티클 추가 완료:', {
-      numParticles: gpuParticleSystem.numParticles,
-      positions: [
-        [-0.8, -0.8, 1.8], [0.8, -0.8, 1.8], [0.0, 0.0, 1.8],
-        [-0.8, 0.8, 1.8], [0.8, 0.8, 1.8]
-      ]
-    });
-    
-    // 파티클 데이터 검증 (비동기)
-    setTimeout(async () => {
-      try {
-        const particles = await gpuParticleSystem.readParticleData();
-        console.log('GPU에서 읽은 파티클 데이터:');
-        particles.forEach((p, index) => {
-          console.log(`  파티클 ${index}: 위치(${p.position[0].toFixed(2)}, ${p.position[1].toFixed(2)}, ${p.position[2].toFixed(2)}) 반지름(${p.radius}) ID(${p.id})`);
-        });
-      } catch (error) {
-        console.error('파티클 데이터 읽기 실패:', error);
-      }
-    }, 500);
-
     // 바인딩 그룹 업데이트 (파티클이 추가된 후) - 동기화 개선
     if (gpuParticleBindGroup) {
       const createBindGroups = await setupGPUParticleRendering();
