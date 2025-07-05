@@ -138,12 +138,59 @@ fn updatePhysics(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     var particle = particles[particleIndex];
-    particle.velocity += params.acceleration * params.deltaTime;
+    
+    // 1. 중력 적용 (질량에 따른 중력 가속도)
+    let gravity = params.acceleration * particle.mass;
+    particle.force += gravity;
+    
+    // 2. 공기 저항 적용 (속도에 비례)
+    let airResistance = 0.02; // 공기 저항 계수
+    let dragForce = -particle.velocity * airResistance * particle.mass;
+    particle.force += dragForce;
+    
+    // 3. 지형과의 충돌 체크
+    let terrainHeight = getTerrainHeight(particle.position.xy);
+    if (terrainHeight > -0.99 && particle.position.z <= terrainHeight + particle.radius) {
+        // 지형 위에 있을 때
+        particle.position.z = terrainHeight + particle.radius;
+        
+        // 수직 속도 제거 (지형과의 충돌)
+        if (particle.velocity.z < 0.0) {
+            particle.velocity.z = -particle.velocity.z * params.restitution;
+        }
+        
+        // 지형에서의 마찰
+        let terrainFriction = 0.9;
+        particle.velocity.x *= terrainFriction;
+        particle.velocity.y *= terrainFriction;
+        
+        // 지형에서의 정지 마찰 (속도가 매우 작을 때)
+        if (length(particle.velocity.xy) < 0.1) {
+            particle.velocity.x *= 0.95;
+            particle.velocity.y *= 0.95;
+        }
+    }
+    
+    // 4. 뉴턴의 운동 법칙 적용: F = ma, a = F/m
+    let acceleration = particle.force / particle.mass;
+    
+    // 5. 속도 업데이트 (Verlet integration 방식)
+    particle.velocity += acceleration * params.deltaTime;
+    
+    // 6. 위치 업데이트
     particle.position += particle.velocity * params.deltaTime;
+    
+    // 7. 속도 감쇠 (에너지 손실)
+    let velocityDamping = 0.999;
+    particle.velocity *= velocityDamping;
+    
+    // 8. 힘 초기화 (다음 프레임을 위해)
+    particle.force = vec3<f32>(0.0, 0.0, 0.0);
+    
     particles[particleIndex] = particle;
 }
 
-// 4단계: 충돌 감지 및 응답 (힘 기반)
+// 4단계: 월드 경계 충돌 감지 및 응답
 @compute @workgroup_size(32)
 fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     let particleIndex = gid.x;
@@ -152,5 +199,53 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     
     var particle = particles[particleIndex];
-    // 추후 구현
+
+    // 월드 경계 체크 및 충돌 처리
+    var collisionOccurred = false;
+    
+    // X축 경계 체크
+    if (particle.position.x < -params.worldBounds.x) {
+        particle.position.x = -params.worldBounds.x;
+        particle.velocity.x = -particle.velocity.x * params.restitution;
+        collisionOccurred = true;
+    } else if (particle.position.x > params.worldBounds.x) {
+        particle.position.x = params.worldBounds.x;
+        particle.velocity.x = -particle.velocity.x * params.restitution;
+        collisionOccurred = true;
+    }
+    
+    // Y축 경계 체크
+    if (particle.position.y < -params.worldBounds.y) {
+        particle.position.y = -params.worldBounds.y;
+        particle.velocity.y = -particle.velocity.y * params.restitution;
+        collisionOccurred = true;
+    } else if (particle.position.y > params.worldBounds.y) {
+        particle.position.y = params.worldBounds.y;
+        particle.velocity.y = -particle.velocity.y * params.restitution;
+        collisionOccurred = true;
+    }
+    
+    // Z축 경계 체크 (바닥과 천장)
+    if (particle.position.z < -params.worldBounds.z) {
+        particle.position.z = -params.worldBounds.z;
+        particle.velocity.z = -particle.velocity.z * params.restitution;
+        // 바닥 충돌 시 마찰 효과 적용
+        particle.velocity.x *= params.friction;
+        particle.velocity.y *= params.friction;
+        collisionOccurred = true;
+    } else if (particle.position.z > params.worldBounds.z) {
+        particle.position.z = params.worldBounds.z;
+        particle.velocity.z = -particle.velocity.z * params.restitution;
+        collisionOccurred = true;
+    }
+    
+    // 충돌 후 속도가 매우 작을 때 정지 처리
+    if (collisionOccurred) {
+        let minVelocity = 0.01;
+        if (length(particle.velocity) < minVelocity) {
+            particle.velocity *= 0.5;
+        }
+    }
+    
+    particles[particleIndex] = particle;
 } 

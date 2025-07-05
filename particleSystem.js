@@ -206,7 +206,7 @@ export class GPUParticleSystem {
     // 44-47 바이트: vec3<f32> 정렬을 위한 패딩
     floatView[12] = 1.0;                 // worldBounds.x: f32 (48-51 바이트)
     floatView[13] = 1.0;                 // worldBounds.y: f32 (52-55 바이트)
-    floatView[14] = 2.0;                 // worldBounds.z: f32 (56-59 바이트)
+    floatView[14] = 1.0;                 // worldBounds.z: f32 (56-59 바이트)
     // 60-63 바이트: 16바이트 정렬을 위한 패딩
     
     this.device.queue.writeBuffer(this.paramsBuffer, 0, buffer);
