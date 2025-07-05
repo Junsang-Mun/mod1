@@ -195,7 +195,7 @@ async function init() {
         bindGroup0: webgpu.createBindGroup(gpuParticleBindGroupLayout0, [
           {
             binding: 0,
-            resource: { buffer: mvpBuffer },
+            resource: { buffer: particleUniformBuffer }, // 시간과 가속도 정보 포함된 버퍼 사용
           },
         ]),
         bindGroup1: webgpu.createBindGroup(gpuParticleBindGroupLayout1, [
@@ -278,13 +278,18 @@ async function init() {
 
     // GPU 파티클 시스템 초기화
     if (!gpuParticleSystem) {
+      console.log('GPU 파티클 시스템 초기화 중...');
       gpuParticleSystem = new GPUParticleSystem(device, 500);
       
       // GPU 파티클 렌더링 설정
+      console.log('GPU 파티클 렌더링 설정 중...');
       const createBindGroups = await setupGPUParticleRendering();
       const bindGroups = createBindGroups();
       if (bindGroups) {
         gpuParticleBindGroup = bindGroups;
+        console.log('GPU 파티클 바인딩 그룹 초기화 완료');
+      } else {
+        console.error('GPU 파티클 바인딩 그룹 생성 실패');
       }
     }
 
@@ -292,27 +297,42 @@ async function init() {
     generateTerrainHeightData(points);
     gpuParticleSystem.updateTerrain(terrainHeightData, 50);
 
-    // 초기 파티클 추가
-    for (let i = 0; i < 30; i++) {
-      gpuParticleSystem.addParticle(
-        [Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 + 1],
-        [Math.random() * 0.4 - 0.2, Math.random() * 0.4 - 0.2, 0],
-        0.03 + Math.random() * 0.02,
-        1.0
-      );
-    }
-
-    // 바인딩 그룹 업데이트 (파티클이 추가된 후)
-    if (gpuParticleBindGroup) {
-      // 바인딩 그룹 재생성 (비동기 없이)
-      setTimeout(() => {
-        setupGPUParticleRendering().then(createBindGroups => {
-          const bindGroups = createBindGroups();
-          if (bindGroups) {
-            gpuParticleBindGroup = bindGroups;
-          }
+    // 초기 파티클 추가 - 더 넓게 분산 배치 (크기 증가)
+    gpuParticleSystem.addParticle([-0.8, -0.8, 1.8], [0, 0, 0], 0.15);
+    gpuParticleSystem.addParticle([0.8, -0.8, 1.8], [0, 0, 0], 0.15);
+    gpuParticleSystem.addParticle([0.0, 0.0, 1.8], [0, 0, 0], 0.15);
+    gpuParticleSystem.addParticle([-0.8, 0.8, 1.8], [0, 0, 0], 0.15);
+    gpuParticleSystem.addParticle([0.8, 0.8, 1.8], [0, 0, 0], 0.15);
+    
+    console.log('5개 파티클 추가 완료:', {
+      numParticles: gpuParticleSystem.numParticles,
+      positions: [
+        [-0.8, -0.8, 1.8], [0.8, -0.8, 1.8], [0.0, 0.0, 1.8],
+        [-0.8, 0.8, 1.8], [0.8, 0.8, 1.8]
+      ]
+    });
+    
+    // 파티클 데이터 검증 (비동기)
+    setTimeout(async () => {
+      try {
+        const particles = await gpuParticleSystem.readParticleData();
+        console.log('GPU에서 읽은 파티클 데이터:');
+        particles.forEach((p, index) => {
+          console.log(`  파티클 ${index}: 위치(${p.position[0].toFixed(2)}, ${p.position[1].toFixed(2)}, ${p.position[2].toFixed(2)}) 반지름(${p.radius}) ID(${p.id})`);
         });
-      }, 100);
+      } catch (error) {
+        console.error('파티클 데이터 읽기 실패:', error);
+      }
+    }, 500);
+
+    // 바인딩 그룹 업데이트 (파티클이 추가된 후) - 동기화 개선
+    if (gpuParticleBindGroup) {
+      const createBindGroups = await setupGPUParticleRendering();
+      const bindGroups = createBindGroups();
+      if (bindGroups) {
+        gpuParticleBindGroup = bindGroups;
+        console.log('GPU 파티클 바인딩 그룹 업데이트 완료');
+      }
     }
 
     // Update MVP matrix
@@ -422,21 +442,21 @@ async function init() {
     // GPU 파티클 추가 (P 키)
     else if (e.key === "p" || e.key === "P") {
       if (gpuParticleSystem) {
-        // 랜덤 위치에 파티클 추가
+        // 랜덤 위치에 파티클 추가 (크기 증가, 더 높은 위치에서 시작)
         gpuParticleSystem.addParticle(
-          [Math.random() * 2 - 1, Math.random() * 2 - 1, 1.5],
-          [Math.random() * 0.4 - 0.2, Math.random() * 0.4 - 0.2, 0],
-          0.03 + Math.random() * 0.02,
-          1.0
+          [Math.random() * 1.6 - 0.8, Math.random() * 1.6 - 0.8, 2.0],
+          [0, 0, 0],
+          0.15
         );
         console.log(`파티클 추가됨! 총 ${gpuParticleSystem.numParticles}개`);
         
-        // 바인딩 그룹 업데이트
+        // 바인딩 그룹 업데이트 - 동기화 개선
         if (gpuParticleBindGroup) {
           setupGPUParticleRendering().then(createBindGroups => {
             const bindGroups = createBindGroups();
             if (bindGroups) {
               gpuParticleBindGroup = bindGroups;
+              console.log('P키 파티클 바인딩 그룹 업데이트 완료');
             }
           });
         }
@@ -463,11 +483,8 @@ async function init() {
 
     const encoder = webgpu.createCommandEncoder();
 
-    // GPU 파티클 시뮬레이션 실행 (렌더 패스 전에)
-    if (gpuParticleSystem) {
-      gpuParticleSystem.updateParams(deltaTime, [0, 0, -9.8]);
-      gpuParticleSystem.simulate(encoder);
-    }
+    // GPU 파티클 시뮬레이션 비활성화 - 셰이더에서 시간 기반 물리 사용
+    // 물리 시뮬레이션은 사용하지 않고 초기 위치 데이터만 유지
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [
@@ -554,14 +571,38 @@ async function init() {
       pass.draw(numParticleVertices, 1, 0, 0);
     }
 
-    // Render GPU particles (인스턴싱)
+    // Render GPU particles (인스턴싱) - 다른 객체들 이후에 렌더링
     if (gpuParticleRenderPipeline && gpuParticleBindGroup && particleCubeVertexBuffer && 
         gpuParticleSystem && gpuParticleSystem.numParticles > 0) {
+      
+      // 디버깅: 렌더링 전 파티클 상태 확인 (한 번만 출력)
+      if (time < 1.0 && Math.floor(time * 4) % 4 === 0) { // 0.25초마다 한번씩 출력
+        console.log('GPU 파티클 렌더링 중:', {
+          numParticles: gpuParticleSystem.numParticles,
+          vertexCount: particleCubeVertexCount
+        });
+      }
+      
       pass.setPipeline(gpuParticleRenderPipeline);
       pass.setBindGroup(0, gpuParticleBindGroup.bindGroup0);
       pass.setBindGroup(1, gpuParticleBindGroup.bindGroup1);
       pass.setVertexBuffer(0, particleCubeVertexBuffer);
       pass.draw(particleCubeVertexCount, gpuParticleSystem.numParticles, 0, 0);
+      
+      // 렌더링 완료 메시지 (한 번만 출력)
+      if (time < 0.5) {
+        console.log('GPU 파티클 렌더링 완료');
+      }
+    } else {
+      // 디버깅: 렌더링 조건 확인 (한 번만 출력)
+      if (time < 1.0) { // 처음 1초 동안만 로그 출력
+        console.log('GPU 파티클 렌더링 조건 미충족:', {
+          pipeline: !!gpuParticleRenderPipeline,
+          bindGroup: !!gpuParticleBindGroup,
+          particleSystem: !!gpuParticleSystem,
+          numParticles: gpuParticleSystem?.numParticles || 0
+        });
+      }
     }
 
     pass.end();

@@ -6,9 +6,11 @@ export class GPUParticleSystem {
     this.numParticles = 0;
     this.gridSize = 32; // 32x32x32 그리드
     
+    console.log('GPU 파티클 시스템 초기화 중...');
     this.setupBuffers();
     this.setupBindGroups();
     this.setupComputePipelines();
+    console.log('GPU 파티클 시스템 초기화 완료!');
   }
   
   setupBuffers() {
@@ -125,7 +127,8 @@ export class GPUParticleSystem {
       
     } catch (error) {
       console.error('컴퓨트 파이프라인 생성 실패:', error);
-      throw error;
+      // 에러를 throw하지 않고 계속 진행하도록 함
+      console.warn('컴퓨트 파이프라인 없이 계속 진행합니다.');
     }
   }
   
@@ -162,17 +165,25 @@ export class GPUParticleSystem {
     floatView[9] = 0.0;
     floatView[10] = 0.0;
     
-    // id (1 uint32) - 44-47 바이트
-    uint32View[11] = this.numParticles;
+    // 현재 파티클 인덱스 저장
+    const currentIndex = this.numParticles;
+    const bufferOffset = currentIndex * 48;
+    
+    // id (1 uint32) - 44-47 바이트 (올바른 인덱스 사용)
+    uint32View[11] = currentIndex;
     
     // 버퍼에 데이터 쓰기
     this.device.queue.writeBuffer(
       this.particleBuffer,
-      this.numParticles * 48,
+      bufferOffset,
       buffer
     );
     
+    // 파티클 수 증가
     this.numParticles++;
+    
+    // 디버깅 정보 출력 (간단하게)
+    console.log(`파티클 ${currentIndex} 추가: 위치(${position[0].toFixed(2)}, ${position[1].toFixed(2)}, ${position[2].toFixed(2)}) 총 ${this.numParticles}개`);
   }
   
   // 시뮬레이션 파라미터 업데이트
@@ -267,13 +278,15 @@ export class GPUParticleSystem {
     
     const particles = [];
     for (let i = 0; i < this.numParticles; i++) {
+      // 48바이트 구조체를 4바이트 단위로 읽기 (48/4 = 12 floats per particle)
       const offset = i * 12;
       particles.push({
         position: [data[offset], data[offset + 1], data[offset + 2]],
         radius: data[offset + 3],
         velocity: [data[offset + 4], data[offset + 5], data[offset + 6]],
         mass: data[offset + 7],
-        id: data[offset + 11]
+        force: [data[offset + 8], data[offset + 9], data[offset + 10]],
+        id: new Uint32Array(data.buffer, (offset + 11) * 4, 1)[0] // uint32로 읽기
       });
     }
     
