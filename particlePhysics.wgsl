@@ -137,70 +137,9 @@ fn updatePhysics(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (particleIndex >= params.numParticles) {
         return;
     }
-    
     var particle = particles[particleIndex];
-    
-    // 가속도 적용 (중력 포함)
     particle.velocity += params.acceleration * params.deltaTime;
-    
-    // // 사용자 정의 힘 적용
-    // particle.velocity += (particle.force / particle.mass) * params.deltaTime;
-    
-    // // 위치 업데이트
     particle.position += particle.velocity * params.deltaTime;
-    
-    // // 월드 경계 충돌 검사
-    // if (particle.position.x - particle.radius < -params.worldBounds.x) {
-    //     particle.position.x = -params.worldBounds.x + particle.radius;
-    //     particle.velocity.x *= -params.restitution;
-    // }
-    // if (particle.position.x + particle.radius > params.worldBounds.x) {
-    //     particle.position.x = params.worldBounds.x - particle.radius;
-    //     particle.velocity.x *= -params.restitution;
-    // }
-    
-    // if (particle.position.y - particle.radius < -params.worldBounds.y) {
-    //     particle.position.y = -params.worldBounds.y + particle.radius;
-    //     particle.velocity.y *= -params.restitution;
-    // }
-    // if (particle.position.y + particle.radius > params.worldBounds.y) {
-    //     particle.position.y = params.worldBounds.y - particle.radius;
-    //     particle.velocity.y *= -params.restitution;
-    // }
-    
-    // if (particle.position.z - particle.radius < -params.worldBounds.z) {
-    //     particle.position.z = -params.worldBounds.z + particle.radius;
-    //     particle.velocity.z *= -params.restitution;
-    // }
-    // if (particle.position.z + particle.radius > params.worldBounds.z) {
-    //     particle.position.z = params.worldBounds.z - particle.radius;
-    //     particle.velocity.z *= -params.restitution;
-    // }
-    
-    // // 지형 충돌 검사
-    // let terrainHeight = getTerrainHeight(particle.position.xy);
-    // if (particle.position.z - particle.radius <= terrainHeight) {
-    //     particle.position.z = terrainHeight + particle.radius;
-        
-    //     // 지형 노멀 계산 (올바른 방향)
-    //     let epsilon = 0.01;
-    //     let hx = getTerrainHeight(particle.position.xy + vec2<f32>(epsilon, 0.0));
-    //     let hy = getTerrainHeight(particle.position.xy + vec2<f32>(0.0, epsilon));
-        
-    //     // 올바른 노멀 벡터 계산
-    //     let normal = normalize(vec3<f32>(hx - terrainHeight, hy - terrainHeight, epsilon));
-        
-    //     // 속도 반사
-    //     let dotProduct = dot(particle.velocity, normal);
-    //     if (dotProduct < 0.0) {
-    //         particle.velocity -= 2.0 * dotProduct * normal * params.restitution;
-    //         particle.velocity *= params.friction; // 마찰 적용
-    //     }
-    // }
-    
-    // // 힘 초기화
-    // particle.force = vec3<f32>(0.0, 0.0, 0.0);
-    
     particles[particleIndex] = particle;
 }
 
@@ -213,56 +152,5 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     
     var particle = particles[particleIndex];
-    let cellIndex = spatialHash(particle.position);
-    
-    // 충돌 힘 누적
-    var collisionForce = vec3<f32>(0.0, 0.0, 0.0);
-    
-    // 현재 셀과 주변 27개 셀 검사
-    for (var dx = -1; dx <= 1; dx++) {
-        for (var dy = -1; dy <= 1; dy++) {
-            for (var dz = -1; dz <= 1; dz++) {
-                let neighborPos = vec3<f32>(particle.position) + vec3<f32>(f32(dx), f32(dy), f32(dz)) * params.cellSize;
-                let neighborCellIndex = spatialHash(neighborPos);
-                
-                if (neighborCellIndex >= params.gridSize * params.gridSize * params.gridSize) {
-                    continue;
-                }
-                
-                let particleCount = atomicLoad(&spatialGrid[neighborCellIndex].particleCount);
-                let safeParticleCount = min(particleCount, 32u);
-                
-                // 셀 내 모든 파티클과 충돌 검사
-                for (var i = 0u; i < safeParticleCount; i++) {
-                    let otherIndex = spatialGrid[neighborCellIndex].particleIndices[i];
-                    if (otherIndex == particleIndex || otherIndex >= params.numParticles) {
-                        continue;
-                    }
-                    
-                    let other = particles[otherIndex];
-                    let delta = particle.position - other.position;
-                    let distance = length(delta);
-                    let minDistance = particle.radius + other.radius;
-                    
-                    if (distance < minDistance && distance > 0.0) {
-                        // 충돌 힘 계산 (더 안정적인 스프링-댐퍼 모델)
-                        let overlap = minDistance - distance;
-                        let direction = normalize(delta);
-                        
-                        // 스프링 힘 (위치 기반) - 힘 크기 감소
-                        let springForce = direction * overlap * 100.0; // 스프링 상수 감소 (1000.0 -> 100.0)
-                        
-                        // 댐핑 힘 (속도 기반) - 댐핑 계수 감소
-                        let relativeVelocity = particle.velocity - other.velocity;
-                        let dampingForce = -dot(relativeVelocity, direction) * direction * 5.0; // 댐핑 계수 감소 (50.0 -> 5.0)
-                        
-                        collisionForce += springForce + dampingForce;
-                    }
-                }
-            }
-        }
-    }
-    
-    // 충돌 힘을 파티클에 적용
-    particles[particleIndex].force += collisionForce;
+    // 추후 구현
 } 

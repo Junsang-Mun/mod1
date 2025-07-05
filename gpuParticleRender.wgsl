@@ -43,7 +43,6 @@ fn vs_main(input: VertexInput) -> VertexOutput {
   let scaledPos = input.pos * particle.radius * 2.0;
   
   // 물리 시뮬레이션에서 계산된 실제 파티클 위치 사용
-  // (시간 기반 가속도 계산 제거 - 물리 시뮬레이션에서 이미 처리됨)
   let worldPos = scaledPos + particle.position;
   
   out.position = uniforms.mvp * vec4<f32>(worldPos, 1.0);

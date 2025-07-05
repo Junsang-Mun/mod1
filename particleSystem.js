@@ -187,24 +187,27 @@ export class GPUParticleSystem {
   
   // 시뮬레이션 파라미터 업데이트
   updateParams(deltaTime, acceleration = [0, 0, -9.8]) {
-    // 64바이트 정렬된 버퍼 생성
+    // 64바이트 정렬된 버퍼 생성 (WebGPU 메모리 정렬 규칙 준수)
     const buffer = new ArrayBuffer(64);
     const floatView = new Float32Array(buffer);
     const uintView = new Uint32Array(buffer);
     
-    // u32와 f32를 정확한 위치에 배치
+    // WebGPU 메모리 정렬 규칙에 맞춰 데이터 배치
     uintView[0] = this.numParticles;     // numParticles: u32 (0-3 바이트)
     floatView[1] = deltaTime;            // deltaTime: f32 (4-7 바이트)
-    floatView[2] = acceleration[0];      // acceleration.x: f32 (8-11 바이트)
-    floatView[3] = acceleration[1];      // acceleration.y: f32 (12-15 바이트)
-    floatView[4] = acceleration[2];      // acceleration.z: f32 (16-19 바이트)
-    floatView[5] = 0.6;                  // restitution: f32 (20-23 바이트) - 반발 계수 증가
-    floatView[6] = 0.8;                  // friction: f32 (24-27 바이트) - 마찰 감소
-    uintView[7] = this.gridSize;         // gridSize: u32 (28-31 바이트)
-    floatView[8] = 0.2;                  // cellSize: f32 (32-35 바이트)
-    floatView[9] = 1.0;                  // worldBounds.x: f32 (36-39 바이트)
-    floatView[10] = 1.0;                 // worldBounds.y: f32 (40-43 바이트)
-    floatView[11] = 2.0;                 // worldBounds.z: f32 (44-47 바이트)
+    // 8-15 바이트: vec3<f32> 정렬을 위한 패딩
+    floatView[4] = acceleration[0];      // acceleration.x: f32 (16-19 바이트)
+    floatView[5] = acceleration[1];      // acceleration.y: f32 (20-23 바이트)
+    floatView[6] = acceleration[2];      // acceleration.z: f32 (24-27 바이트)
+    floatView[7] = 0.6;                  // restitution: f32 (28-31 바이트)
+    floatView[8] = 0.8;                  // friction: f32 (32-35 바이트)
+    uintView[9] = this.gridSize;         // gridSize: u32 (36-39 바이트)
+    floatView[10] = 0.2;                 // cellSize: f32 (40-43 바이트)
+    // 44-47 바이트: vec3<f32> 정렬을 위한 패딩
+    floatView[12] = 1.0;                 // worldBounds.x: f32 (48-51 바이트)
+    floatView[13] = 1.0;                 // worldBounds.y: f32 (52-55 바이트)
+    floatView[14] = 2.0;                 // worldBounds.z: f32 (56-59 바이트)
+    // 60-63 바이트: 16바이트 정렬을 위한 패딩
     
     this.device.queue.writeBuffer(this.paramsBuffer, 0, buffer);
   }
