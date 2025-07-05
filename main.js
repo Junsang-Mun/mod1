@@ -252,16 +252,33 @@ async function init() {
       },
     });
 
-    // Update particle uniforms (MVP, time, gravity)
+    // Update particle uniforms (MVP, acceleration vector, time)
     const now = performance.now();
     const time = (now - startTime) * 0.001; // seconds
-    const gravity = -9.8; // or any value you want
+    
+    // 3차원 가속도 벡터 설정 (x, y, z) - 단위: m/s²
+    // 다양한 물리 효과를 위한 가속도 벡터 예시:
+    // - 중력만: [0.0, 0.0, -9.8]
+    // - 바람 효과: [2.0, 0.0, -9.8]
+    // - 회전 효과: [Math.sin(time), Math.cos(time), -9.8]
+    // - 진동 효과: [0.0, 5.0 * Math.sin(time * 2), -9.8]
+    
+    const acceleration = [
+      0.0,    // X축 가속도 (좌우)
+      0.0,    // Y축 가속도 (앞뒤)
+      -9.8    // Z축 가속도 (상하, 중력)
+    ];
+    
     const mvpMatrix = computeMVPMatrix();
     const uniformArray = new Float32Array(20);
-    uniformArray.set(mvpMatrix, 0); // 16 floats
-    uniformArray[16] = time;
-    uniformArray[17] = gravity;
-    // [18] and [19] are padding
+    
+    // WebGPU 메모리 정렬에 맞춰 데이터 설정
+    uniformArray.set(mvpMatrix, 0);           // 0-15: MVP 매트릭스 (16 floats)
+    uniformArray[16] = acceleration[0];       // 16: X축 가속도
+    uniformArray[17] = acceleration[1];       // 17: Y축 가속도
+    uniformArray[18] = acceleration[2];       // 18: Z축 가속도
+    uniformArray[19] = time;                  // 19: 시간
+    
     webgpu.writeBuffer(particleUniformBuffer, 0, uniformArray);
 
     // Render coordinate axes

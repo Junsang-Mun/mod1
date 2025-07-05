@@ -41,22 +41,28 @@ fn vs_terrain(input: VertexInput) -> TerrainVertexOutput {
 }
 
 // --- Gravity-enabled Particle Vertex Shader ---
-// 확장된 Uniforms: 시간과 중력 추가
+// 확장된 Uniforms: 시간과 가속도 벡터 추가
 struct ParticleUniforms {
-  mvp: mat4x4<f32>,
-  time: f32,
-  gravity: f32,
+  mvp: mat4x4<f32>,        // 0-63 바이트 (64바이트)
+  acceleration: vec3<f32>, // 64-75 바이트 (12바이트 + 4바이트 패딩으로 16바이트 경계 정렬)
+  time: f32,               // 76-79 바이트 (4바이트)
+  // 총 80바이트 (WebGPU 메모리 정렬 규칙 준수)
 };
 @group(0) @binding(0) var<uniform> particleUniforms: ParticleUniforms;
 
-// 파티클용 버텍스 셰이더 (중력 적용)
+// 파티클용 버텍스 셰이더 (3차원 가속도 적용)
 @vertex
 fn vs_particle(input: VertexInput) -> ParticleVertexOutput {
   var out: ParticleVertexOutput;
   var pos = input.pos;
-  // 중력 공식: z = z0 + v0 * t + 0.5 * g * t^2 (v0=0 가정)
-  //  pos.z = pos.z + 0.5 * particleUniforms.gravity * particleUniforms.time * particleUniforms.time;
-  pos.z = pos.z + 0.001 * particleUniforms.gravity * particleUniforms.time * particleUniforms.time;
+  
+  // 가속도 공식: p = p0 + v0 * t + 0.5 * a * t^2 (v0=0 가정)
+  // 3차원 가속도 벡터를 모든 축에 적용
+  let timeSquared = particleUniforms.time * particleUniforms.time;
+  let displacement = 0.5 * particleUniforms.acceleration * timeSquared;
+  
+  pos = pos + displacement;
+  
   out.position = particleUniforms.mvp * vec4<f32>(pos, 1.0);
   out.worldPos = pos;
   return out;
