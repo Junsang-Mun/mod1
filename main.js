@@ -412,6 +412,11 @@ async function init() {
         // 랜덤 위치에 파티클 추가 (크기 증가, 더 높은 위치에서 시작)
         gpuParticleSystem.addParticle(
           [Math.random() * 2 - 1, Math.random() * 2 - 1, 0.8],
+          [
+            (Math.random() - 0.5) * 6, // x 방향 속도: -3 ~ 3
+            (Math.random() - 0.5) * 6, // y 방향 속도: -3 ~ 3
+            Math.random() * 4 + 1      // z 방향 속도: 1 ~ 5 (위쪽으로 초기 속도)
+          ]
         );
         console.log(`파티클 추가됨! 총 ${gpuParticleSystem.numParticles}개`);
         
