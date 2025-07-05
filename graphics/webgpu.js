@@ -56,6 +56,14 @@ export class WebGPUSetup {
     });
   }
 
+  // Create storage buffer
+  createStorageBuffer(size, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST) {
+    return this.device.createBuffer({
+      size: size,
+      usage: usage,
+    });
+  }
+
   // Create bind group layout
   createBindGroupLayout(entries) {
     return this.device.createBindGroupLayout({ entries });

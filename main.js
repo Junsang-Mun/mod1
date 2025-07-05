@@ -5,10 +5,16 @@ import { WebGPUSetup } from "./graphics/webgpu.js";
 import { PipelineFactory } from "./graphics/pipelines.js";
 import { GeometryUtils } from "./geometry/geometryUtils.js";
 import { AxesManager } from "./graphics/axes.js";
+import { GPUParticleSystem } from "./particleSystem.js";
 
 // Store resize observer and rendering variables globally
 let resizeObserver;
 let depthTexture;
+
+// GPU 파티클 시스템 전역 변수
+let gpuParticleSystem;
+let lastFrameTime = performance.now();
+let terrainHeightData = [];
 
 window.addEventListener("DOMContentLoaded", () => {
   init().catch((err) => console.error("Initialization error:", err));
@@ -138,6 +144,72 @@ async function init() {
     bindGroupLayout,
   );
 
+  // GPU 파티클 렌더링을 위한 별도 파이프라인 설정
+  let gpuParticleRenderPipeline = null;
+  let gpuParticleBindGroup = null;
+  let particleCubeVertexBuffer = null;
+  let particleCubeVertexCount = 0;
+
+  async function setupGPUParticleRendering() {
+    // GPU 파티클 렌더링 셰이더 모듈 생성
+    const gpuParticleShaderModule = await webgpu.createShaderModule("gpuParticleRender.wgsl");
+    
+    // 바인딩 그룹 레이아웃
+    const gpuParticleBindGroupLayout0 = webgpu.createBindGroupLayout([
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX,
+        buffer: {},
+      },
+    ]);
+    
+    const gpuParticleBindGroupLayout1 = webgpu.createBindGroupLayout([
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX,
+        buffer: { type: 'read-only-storage' },
+      },
+    ]);
+
+    // 파이프라인 생성
+    gpuParticleRenderPipeline = pipelineFactory.createGPUParticlePipeline(
+      gpuParticleShaderModule,
+      [gpuParticleBindGroupLayout0, gpuParticleBindGroupLayout1]
+    );
+
+    // 파티클 큐브 지오메트리 생성 (단위 큐브)
+    const cubeVertices = GeometryUtils.generateCubeFaces(1.0, [0, 0, 0]);
+    particleCubeVertexCount = cubeVertices.length / 3;
+    
+    const cubeData = new Float32Array(cubeVertices);
+    particleCubeVertexBuffer = webgpu.createVertexBuffer(cubeData);
+
+    // 바인딩 그룹 생성 함수
+    function createGPUParticleBindGroups() {
+      if (!gpuParticleSystem || !gpuParticleSystem.particleBuffer) {
+        console.warn('GPU 파티클 시스템이 초기화되지 않았습니다.');
+        return null;
+      }
+
+      return {
+        bindGroup0: webgpu.createBindGroup(gpuParticleBindGroupLayout0, [
+          {
+            binding: 0,
+            resource: { buffer: mvpBuffer },
+          },
+        ]),
+        bindGroup1: webgpu.createBindGroup(gpuParticleBindGroupLayout1, [
+          {
+            binding: 0,
+            resource: { buffer: gpuParticleSystem.particleBuffer },
+          },
+        ])
+      };
+    }
+
+    return createGPUParticleBindGroups;
+  }
+
   let wireframeVertexBuffer = null;
   let numWireframeVertices = 0;
   let terrainVertexBuffer = null;
@@ -198,15 +270,95 @@ async function init() {
     const wireframeData = new Float32Array(wireframeVertices);
     wireframeVertexBuffer = webgpu.createVertexBuffer(wireframeData);
 
-    // Generate particle geometry
+    // Generate particle geometry (기존 단일 파티클)
     const particleVertices = GeometryUtils.generateParticleCube(0.1, [0.5, 0.5, 0.5]);
     numParticleVertices = particleVertices.length / 3;
     const particleData = new Float32Array(particleVertices);
     particleVertexBuffer = webgpu.createVertexBuffer(particleData);
 
+    // GPU 파티클 시스템 초기화
+    if (!gpuParticleSystem) {
+      gpuParticleSystem = new GPUParticleSystem(device, 500);
+      
+      // GPU 파티클 렌더링 설정
+      const createBindGroups = await setupGPUParticleRendering();
+      const bindGroups = createBindGroups();
+      if (bindGroups) {
+        gpuParticleBindGroup = bindGroups;
+      }
+    }
+
+    // 지형 높이 데이터 생성 및 업데이트
+    generateTerrainHeightData(points);
+    gpuParticleSystem.updateTerrain(terrainHeightData, 50);
+
+    // 초기 파티클 추가
+    for (let i = 0; i < 30; i++) {
+      gpuParticleSystem.addParticle(
+        [Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 + 1],
+        [Math.random() * 0.4 - 0.2, Math.random() * 0.4 - 0.2, 0],
+        0.03 + Math.random() * 0.02,
+        1.0
+      );
+    }
+
+    // 바인딩 그룹 업데이트 (파티클이 추가된 후)
+    if (gpuParticleBindGroup) {
+      // 바인딩 그룹 재생성 (비동기 없이)
+      setTimeout(() => {
+        setupGPUParticleRendering().then(createBindGroups => {
+          const bindGroups = createBindGroups();
+          if (bindGroups) {
+            gpuParticleBindGroup = bindGroups;
+          }
+        });
+      }, 100);
+    }
+
     // Update MVP matrix
     const mvpMatrix = computeMVPMatrix();
     webgpu.writeBuffer(mvpBuffer, 0, mvpMatrix);
+  }
+
+  /**
+   * Generate terrain height data for GPU particle system
+   */
+  function generateTerrainHeightData(points) {
+    const gridResolution = 50;
+    const bounds = { min: [-1, -1], max: [1, 1] };
+    const stepX = (bounds.max[0] - bounds.min[0]) / (gridResolution - 1);
+    const stepY = (bounds.max[1] - bounds.min[1]) / (gridResolution - 1);
+    
+    terrainHeightData = [];
+    
+    for (let j = 0; j < gridResolution; j++) {
+      for (let i = 0; i < gridResolution; i++) {
+        const x = bounds.min[0] + i * stepX;
+        const y = bounds.min[1] + j * stepY;
+        
+        // RBF 보간으로 높이 계산
+        let height = -1.0;
+        if (points && points.length > 0) {
+          const sigma = 0.3;
+          let numerator = -1.0;
+          let denominator = 1.0;
+          
+          for (const point of points) {
+            const dx = x - point.x;
+            const dy = y - point.y;
+            const distanceSquared = dx * dx + dy * dy;
+            const weight = Math.exp(-distanceSquared / (sigma * sigma));
+            
+            numerator += weight * point.z;
+            denominator += weight;
+          }
+          
+          height = numerator / denominator;
+        }
+        
+        terrainHeightData.push(height);
+      }
+    }
   }
 
   /**
@@ -267,6 +419,29 @@ async function init() {
       camera.zoom *= 1 - zoomFactor;
       camera.updatePosition();
     }
+    // GPU 파티클 추가 (P 키)
+    else if (e.key === "p" || e.key === "P") {
+      if (gpuParticleSystem) {
+        // 랜덤 위치에 파티클 추가
+        gpuParticleSystem.addParticle(
+          [Math.random() * 2 - 1, Math.random() * 2 - 1, 1.5],
+          [Math.random() * 0.4 - 0.2, Math.random() * 0.4 - 0.2, 0],
+          0.03 + Math.random() * 0.02,
+          1.0
+        );
+        console.log(`파티클 추가됨! 총 ${gpuParticleSystem.numParticles}개`);
+        
+        // 바인딩 그룹 업데이트
+        if (gpuParticleBindGroup) {
+          setupGPUParticleRendering().then(createBindGroups => {
+            const bindGroups = createBindGroups();
+            if (bindGroups) {
+              gpuParticleBindGroup = bindGroups;
+            }
+          });
+        }
+      }
+    }
 
     // Update MVP matrix
     const mvpMatrix = computeMVPMatrix();
@@ -282,7 +457,18 @@ async function init() {
       return;
     }
 
+    const now = performance.now();
+    const deltaTime = Math.min((now - lastFrameTime) * 0.001, 0.016); // 최대 16ms로 제한
+    lastFrameTime = now;
+
     const encoder = webgpu.createCommandEncoder();
+
+    // GPU 파티클 시뮬레이션 실행 (렌더 패스 전에)
+    if (gpuParticleSystem) {
+      gpuParticleSystem.updateParams(deltaTime, [0, 0, -9.8]);
+      gpuParticleSystem.simulate(encoder);
+    }
+
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
@@ -300,8 +486,7 @@ async function init() {
       },
     });
 
-    // Update particle uniforms (MVP, acceleration vector, time)
-    const now = performance.now();
+    // Update particle uniforms (MVP, acceleration vector, time) - 기존 단일 파티클용
     const time = (now - startTime) * 0.001; // seconds
     
     // 3차원 가속도 벡터 설정 (x, y, z) - 단위: m/s²
@@ -361,12 +546,22 @@ async function init() {
       pass.draw(numTerrainVertices, 1, 0, 0);
     }
 
-    // Render particle
+    // Render particle (기존 단일 파티클)
     if (particleVertexBuffer && numParticleVertices > 0) {
       pass.setPipeline(pipelines.particle);
       pass.setBindGroup(0, particleBindGroup);
       pass.setVertexBuffer(0, particleVertexBuffer);
       pass.draw(numParticleVertices, 1, 0, 0);
+    }
+
+    // Render GPU particles (인스턴싱)
+    if (gpuParticleRenderPipeline && gpuParticleBindGroup && particleCubeVertexBuffer && 
+        gpuParticleSystem && gpuParticleSystem.numParticles > 0) {
+      pass.setPipeline(gpuParticleRenderPipeline);
+      pass.setBindGroup(0, gpuParticleBindGroup.bindGroup0);
+      pass.setBindGroup(1, gpuParticleBindGroup.bindGroup1);
+      pass.setVertexBuffer(0, particleCubeVertexBuffer);
+      pass.draw(particleCubeVertexCount, gpuParticleSystem.numParticles, 0, 0);
     }
 
     pass.end();
