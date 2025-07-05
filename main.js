@@ -448,8 +448,14 @@ async function init() {
 
     const encoder = webgpu.createCommandEncoder();
 
-    // GPU 파티클 시뮬레이션 비활성화 - 셰이더에서 시간 기반 물리 사용
-    // 물리 시뮬레이션은 사용하지 않고 초기 위치 데이터만 유지
+    // GPU 파티클 물리 시뮬레이션 실행
+    if (gpuParticleSystem && gpuParticleSystem.numParticles > 0) {
+      // 물리 시뮬레이션 파라미터 업데이트
+      gpuParticleSystem.updateParams(deltaTime, [0, 0, -9.8]);
+      
+      // 물리 시뮬레이션 실행
+      gpuParticleSystem.simulate(encoder);
+    }
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [

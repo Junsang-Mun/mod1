@@ -1,21 +1,21 @@
 // particlePhysics.wgsl - GPU 기반 파티클 물리 시뮬레이션
 
-// 파티클 데이터 구조체
+// 파티클 데이터 구조체 - WebGPU 메모리 정렬 규칙 준수
 struct Particle {
     position: vec3<f32>,    // 0-11 바이트
     radius: f32,            // 12-15 바이트
     velocity: vec3<f32>,    // 16-27 바이트
     mass: f32,              // 28-31 바이트
-    force: vec3<f32>,       // 32-43 바이트 (누적 힘)
+    force: vec3<f32>,       // 32-43 바이트
     id: u32,                // 44-47 바이트
-    // 총 48바이트 (16바이트 정렬)
+    // 총 48바이트 (16바이트 정렬을 위해 명시적 패딩 제거)
 };
 
 // 시뮬레이션 파라미터
 struct SimParams {
     numParticles: u32,      // 파티클 개수
     deltaTime: f32,         // 시간 간격
-    gravity: vec3<f32>,     // 중력 벡터
+    acceleration: vec3<f32>, // 가속도 벡터 (중력 포함)
     restitution: f32,       // 반발계수
     friction: f32,          // 마찰계수
     gridSize: u32,          // 공간 해싱 그리드 크기
@@ -24,12 +24,12 @@ struct SimParams {
     // 총 52바이트 (16바이트 정렬로 64바이트)
 };
 
-// 공간 해싱 그리드 셀 (16바이트 정렬)
+// 공간 해싱 그리드 셀 - WebGPU 메모리 정렬 규칙 준수
 struct GridCell {
     particleCount: atomic<u32>,      // 0-3 바이트
     padding: u32,                    // 4-7 바이트 (정렬용)
     particleIndices: array<u32, 32>, // 8-135 바이트 (32 * 4)
-    // 총 136바이트 (16바이트 정렬)
+    // 총 136바이트 (4바이트 정렬)
 };
 
 // 바인딩 그룹 0: 공통 데이터 (모든 컴퓨트 함수에서 사용)
@@ -43,12 +43,13 @@ struct GridCell {
 fn spatialHash(position: vec3<f32>) -> u32 {
     let gridPos = vec3<i32>(floor(position / params.cellSize));
     
-    // 음수 값을 양수로 변환하여 안전하게 처리
-    let x = u32(abs(gridPos.x) % 1000);
-    let y = u32(abs(gridPos.y) % 1000);
-    let z = u32(abs(gridPos.z) % 1000);
+    // 음수 값도 고유한 해시 값을 가지도록 처리
+    let offset = 1000000;
+    let x = u32((gridPos.x + offset) % 1000);
+    let y = u32((gridPos.y + offset) % 1000);
+    let z = u32((gridPos.z + offset) % 1000);
     
-    // 간단한 해싱 (더 안전함)
+    // 더 나은 해싱 함수 사용
     let hash = (x * 73856093u + y * 19349663u + z * 83492791u);
     return hash % (params.gridSize * params.gridSize * params.gridSize);
 }
@@ -139,65 +140,66 @@ fn updatePhysics(@builtin(global_invocation_id) gid: vec3<u32>) {
     
     var particle = particles[particleIndex];
     
-    // 중력 적용
-    particle.velocity += params.gravity * params.deltaTime;
+    // 가속도 적용 (중력 포함)
+    particle.velocity += params.acceleration * params.deltaTime;
     
-    // 사용자 정의 힘 적용
-    particle.velocity += (particle.force / particle.mass) * params.deltaTime;
+    // // 사용자 정의 힘 적용
+    // particle.velocity += (particle.force / particle.mass) * params.deltaTime;
     
-    // 위치 업데이트
+    // // 위치 업데이트
     particle.position += particle.velocity * params.deltaTime;
     
-    // 월드 경계 충돌 검사
-    if (particle.position.x - particle.radius < -params.worldBounds.x) {
-        particle.position.x = -params.worldBounds.x + particle.radius;
-        particle.velocity.x *= -params.restitution;
-    }
-    if (particle.position.x + particle.radius > params.worldBounds.x) {
-        particle.position.x = params.worldBounds.x - particle.radius;
-        particle.velocity.x *= -params.restitution;
-    }
+    // // 월드 경계 충돌 검사
+    // if (particle.position.x - particle.radius < -params.worldBounds.x) {
+    //     particle.position.x = -params.worldBounds.x + particle.radius;
+    //     particle.velocity.x *= -params.restitution;
+    // }
+    // if (particle.position.x + particle.radius > params.worldBounds.x) {
+    //     particle.position.x = params.worldBounds.x - particle.radius;
+    //     particle.velocity.x *= -params.restitution;
+    // }
     
-    if (particle.position.y - particle.radius < -params.worldBounds.y) {
-        particle.position.y = -params.worldBounds.y + particle.radius;
-        particle.velocity.y *= -params.restitution;
-    }
-    if (particle.position.y + particle.radius > params.worldBounds.y) {
-        particle.position.y = params.worldBounds.y - particle.radius;
-        particle.velocity.y *= -params.restitution;
-    }
+    // if (particle.position.y - particle.radius < -params.worldBounds.y) {
+    //     particle.position.y = -params.worldBounds.y + particle.radius;
+    //     particle.velocity.y *= -params.restitution;
+    // }
+    // if (particle.position.y + particle.radius > params.worldBounds.y) {
+    //     particle.position.y = params.worldBounds.y - particle.radius;
+    //     particle.velocity.y *= -params.restitution;
+    // }
     
-    if (particle.position.z - particle.radius < -params.worldBounds.z) {
-        particle.position.z = -params.worldBounds.z + particle.radius;
-        particle.velocity.z *= -params.restitution;
-    }
-    if (particle.position.z + particle.radius > params.worldBounds.z) {
-        particle.position.z = params.worldBounds.z - particle.radius;
-        particle.velocity.z *= -params.restitution;
-    }
+    // if (particle.position.z - particle.radius < -params.worldBounds.z) {
+    //     particle.position.z = -params.worldBounds.z + particle.radius;
+    //     particle.velocity.z *= -params.restitution;
+    // }
+    // if (particle.position.z + particle.radius > params.worldBounds.z) {
+    //     particle.position.z = params.worldBounds.z - particle.radius;
+    //     particle.velocity.z *= -params.restitution;
+    // }
     
-    // 지형 충돌 검사
-    let terrainHeight = getTerrainHeight(particle.position.xy);
-    if (particle.position.z - particle.radius <= terrainHeight) {
-        particle.position.z = terrainHeight + particle.radius;
+    // // 지형 충돌 검사
+    // let terrainHeight = getTerrainHeight(particle.position.xy);
+    // if (particle.position.z - particle.radius <= terrainHeight) {
+    //     particle.position.z = terrainHeight + particle.radius;
         
-        // 지형 노멀 계산 (간단한 추정)
-        let epsilon = 0.01;
-        let hx = getTerrainHeight(particle.position.xy + vec2<f32>(epsilon, 0.0));
-        let hy = getTerrainHeight(particle.position.xy + vec2<f32>(0.0, epsilon));
+    //     // 지형 노멀 계산 (올바른 방향)
+    //     let epsilon = 0.01;
+    //     let hx = getTerrainHeight(particle.position.xy + vec2<f32>(epsilon, 0.0));
+    //     let hy = getTerrainHeight(particle.position.xy + vec2<f32>(0.0, epsilon));
         
-        let normal = normalize(vec3<f32>(terrainHeight - hx, terrainHeight - hy, epsilon));
+    //     // 올바른 노멀 벡터 계산
+    //     let normal = normalize(vec3<f32>(hx - terrainHeight, hy - terrainHeight, epsilon));
         
-        // 속도 반사
-        let dotProduct = dot(particle.velocity, normal);
-        if (dotProduct < 0.0) {
-            particle.velocity -= 2.0 * dotProduct * normal * params.restitution;
-            particle.velocity *= params.friction; // 마찰 적용
-        }
-    }
+    //     // 속도 반사
+    //     let dotProduct = dot(particle.velocity, normal);
+    //     if (dotProduct < 0.0) {
+    //         particle.velocity -= 2.0 * dotProduct * normal * params.restitution;
+    //         particle.velocity *= params.friction; // 마찰 적용
+    //     }
+    // }
     
-    // 힘 초기화
-    particle.force = vec3<f32>(0.0, 0.0, 0.0);
+    // // 힘 초기화
+    // particle.force = vec3<f32>(0.0, 0.0, 0.0);
     
     particles[particleIndex] = particle;
 }
@@ -243,16 +245,16 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
                     let minDistance = particle.radius + other.radius;
                     
                     if (distance < minDistance && distance > 0.0) {
-                        // 충돌 힘 계산 (스프링-댐퍼 모델)
+                        // 충돌 힘 계산 (더 안정적인 스프링-댐퍼 모델)
                         let overlap = minDistance - distance;
                         let direction = normalize(delta);
                         
-                        // 스프링 힘 (위치 기반)
-                        let springForce = direction * overlap * 1000.0; // 스프링 상수
+                        // 스프링 힘 (위치 기반) - 힘 크기 감소
+                        let springForce = direction * overlap * 100.0; // 스프링 상수 감소 (1000.0 -> 100.0)
                         
-                        // 댐핑 힘 (속도 기반)
+                        // 댐핑 힘 (속도 기반) - 댐핑 계수 감소
                         let relativeVelocity = particle.velocity - other.velocity;
-                        let dampingForce = -dot(relativeVelocity, direction) * direction * 50.0; // 댐핑 계수
+                        let dampingForce = -dot(relativeVelocity, direction) * direction * 5.0; // 댐핑 계수 감소 (50.0 -> 5.0)
                         
                         collisionForce += springForce + dampingForce;
                     }

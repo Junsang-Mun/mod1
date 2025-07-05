@@ -30,8 +30,7 @@ export class GPUParticleSystem {
     
     // 공간 해싱 그리드 버퍼
     // 각 셀: 4바이트(atomic count) + 4바이트(padding) + 32 * 4바이트(indices) = 136바이트
-    // WebGPU는 16바이트 정렬을 요구하므로 140바이트로 정렬
-    const cellSize = 140; // 16바이트 정렬된 크기
+    const cellSize = 136; // 실제 GridCell 구조체 크기
     const gridBufferSize = this.gridSize * this.gridSize * this.gridSize * cellSize;
     
     this.spatialGridBuffer = this.device.createBuffer({
@@ -187,7 +186,7 @@ export class GPUParticleSystem {
   }
   
   // 시뮬레이션 파라미터 업데이트
-  updateParams(deltaTime, gravity = [0, 0, -9.8]) {
+  updateParams(deltaTime, acceleration = [0, 0, -9.8]) {
     // 64바이트 정렬된 버퍼 생성
     const buffer = new ArrayBuffer(64);
     const floatView = new Float32Array(buffer);
@@ -196,11 +195,11 @@ export class GPUParticleSystem {
     // u32와 f32를 정확한 위치에 배치
     uintView[0] = this.numParticles;     // numParticles: u32 (0-3 바이트)
     floatView[1] = deltaTime;            // deltaTime: f32 (4-7 바이트)
-    floatView[2] = gravity[0];           // gravity.x: f32 (8-11 바이트)
-    floatView[3] = gravity[1];           // gravity.y: f32 (12-15 바이트)
-    floatView[4] = gravity[2];           // gravity.z: f32 (16-19 바이트)
-    floatView[5] = 0.0;                  // restitution: f32 (20-23 바이트) - 경계 충돌 시 멈춤
-    floatView[6] = 0.95;                 // friction: f32 (24-27 바이트) - 마찰 증가
+    floatView[2] = acceleration[0];      // acceleration.x: f32 (8-11 바이트)
+    floatView[3] = acceleration[1];      // acceleration.y: f32 (12-15 바이트)
+    floatView[4] = acceleration[2];      // acceleration.z: f32 (16-19 바이트)
+    floatView[5] = 0.6;                  // restitution: f32 (20-23 바이트) - 반발 계수 증가
+    floatView[6] = 0.8;                  // friction: f32 (24-27 바이트) - 마찰 감소
     uintView[7] = this.gridSize;         // gridSize: u32 (28-31 바이트)
     floatView[8] = 0.2;                  // cellSize: f32 (32-35 바이트)
     floatView[9] = 1.0;                  // worldBounds.x: f32 (36-39 바이트)
@@ -295,19 +294,21 @@ export class GPUParticleSystem {
     this.device.queue.submit([commandEncoder.finish()]);
     
     await stagingBuffer.mapAsync(GPUMapMode.READ);
-    const data = new Float32Array(stagingBuffer.getMappedRange());
+    const buffer = stagingBuffer.getMappedRange();
     
     const particles = [];
     for (let i = 0; i < this.numParticles; i++) {
-      // 48바이트 구조체를 4바이트 단위로 읽기 (48/4 = 12 floats per particle)
-      const offset = i * 12;
+      const byteOffset = i * 48;
+      const floatView = new Float32Array(buffer, byteOffset, 11); // 11 floats
+      const uint32View = new Uint32Array(buffer, byteOffset + 44, 1); // 1 uint32 at offset 44
+      
       particles.push({
-        position: [data[offset], data[offset + 1], data[offset + 2]],
-        radius: data[offset + 3],
-        velocity: [data[offset + 4], data[offset + 5], data[offset + 6]],
-        mass: data[offset + 7],
-        force: [data[offset + 8], data[offset + 9], data[offset + 10]],
-        id: new Uint32Array(data.buffer, (offset + 11) * 4, 1)[0] // uint32로 읽기
+        position: [floatView[0], floatView[1], floatView[2]],
+        radius: floatView[3],
+        velocity: [floatView[4], floatView[5], floatView[6]],
+        mass: floatView[7],
+        force: [floatView[8], floatView[9], floatView[10]],
+        id: uint32View[0]
       });
     }
     
