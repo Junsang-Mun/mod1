@@ -171,6 +171,30 @@ export class PipelineFactory {
     });
   }
 
+  // GPU 파티클 인스턴싱 파이프라인
+  createGPUParticlePipeline(shaderModule, bindGroupLayouts) {
+    return this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: bindGroupLayouts,
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [this.createVertexBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [{ format: this.format }],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "back",
+      },
+      depthStencil: this.createDepthStencilState(),
+    });
+  }
+
   // Create all pipelines at once
   createAllPipelines(shaderModule, bindGroupLayout) {
     return {
