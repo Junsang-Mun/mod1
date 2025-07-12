@@ -26,7 +26,7 @@ struct SimParams {
 
 // 공간 해싱 그리드 셀 - WebGPU 메모리 정렬 규칙 준수
 struct GridCell {
-    particleCount: atomic<u32>,      // 0-3 바이트
+    particleCount: u32,              // 0-3 바이트
     padding: u32,                    // 4-7 바이트 (정렬용)
     particleIndices: array<u32, 32>, // 8-135 바이트 (32 * 4)
     // 총 136바이트 (4바이트 정렬)
@@ -89,6 +89,25 @@ fn getTerrainHeight(pos: vec2<f32>) -> f32 {
     return mix(h0, h1, fy);
 }
 
+// 파티클 간 충돌 감지 및 응답 함수
+fn resolveParticleCollision(particle1: Particle, particle2: Particle) -> vec3<f32> {
+    let delta = particle2.position - particle1.position;
+    let distance = length(delta);
+    let minDistance = particle1.radius + particle2.radius;
+    
+    // 충돌이 발생한 경우
+    if (distance < minDistance && distance > 0.001) {
+        let normal = delta / distance;
+        let overlap = minDistance - distance;
+        
+        // 위치 보정 (겹침 제거) - 더 강한 보정 적용
+        let correction = normal * overlap * 0.8;
+        return correction;
+    }
+    
+    return vec3<f32>(0.0, 0.0, 0.0);
+}
+
 // 1단계: 공간 해싱 그리드 초기화
 @compute @workgroup_size(32)
 fn clearGrid(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -98,8 +117,8 @@ fn clearGrid(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     
-    // 원자적 카운터 초기화
-    atomicStore(&spatialGrid[cellIndex].particleCount, 0u);
+    // 카운터 초기화
+    spatialGrid[cellIndex].particleCount = 0u;
     
     // 패딩 초기화 (필요한 경우)
     spatialGrid[cellIndex].padding = 0u;
@@ -121,12 +140,13 @@ fn assignParticlesToGrid(@builtin(global_invocation_id) gid: vec3<u32>) {
     let particle = particles[particleIndex];
     let cellIndex = spatialHash(particle.position);
     
-    // 원자적 연산으로 파티클 추가
-    let insertIndex = atomicAdd(&spatialGrid[cellIndex].particleCount, 1u);
+    // 파티클 추가 (간단한 접근 방식)
+    let currentCount = spatialGrid[cellIndex].particleCount;
     
     // 셀이 꽉 찬 경우 무시 (오버플로우 방지)
-    if (insertIndex < 32u) {
-        spatialGrid[cellIndex].particleIndices[insertIndex] = particleIndex;
+    if (currentCount < 32u) {
+        spatialGrid[cellIndex].particleIndices[currentCount] = particleIndex;
+        spatialGrid[cellIndex].particleCount = currentCount + 1u;
     }
 }
 
@@ -167,7 +187,63 @@ fn updatePhysics(@builtin(global_invocation_id) gid: vec3<u32>) {
     particles[particleIndex] = particle;
 }
 
-// 4단계: 모든 충돌 감지 및 응답 (지형 + 월드 경계)
+// 4단계: 파티클 간 충돌 감지 및 응답
+@compute @workgroup_size(32)
+fn detectParticleCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let particleIndex = gid.x;
+    if (particleIndex >= params.numParticles) {
+        return;
+    }
+    
+    var particle = particles[particleIndex];
+    var totalCorrection = vec3<f32>(0.0, 0.0, 0.0);
+    
+    // 현재 파티클의 셀과 인접 셀들을 확인
+    let currentCell = spatialHash(particle.position);
+    
+    // 3x3x3 인접 셀 범위에서 충돌 검사
+    for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
+            for (var dz = -1; dz <= 1; dz++) {
+                let offset = vec3<i32>(dx, dy, dz);
+                let neighborCell = spatialHash(particle.position + vec3<f32>(offset) * params.cellSize);
+                
+                // 셀 내의 모든 파티클과 충돌 검사
+                let particleCount = spatialGrid[neighborCell].particleCount;
+                
+                for (var i = 0u; i < min(particleCount, 32u); i++) {
+                    let otherIndex = spatialGrid[neighborCell].particleIndices[i];
+                    
+                    // 자기 자신은 제외하고 유효한 파티클만 검사
+                    if (otherIndex != particleIndex && otherIndex < params.numParticles) {
+                        let otherParticle = particles[otherIndex];
+                        
+                        // 거리 기반 충돌 검사 (성능 최적화)
+                        let delta = otherParticle.position - particle.position;
+                        let distance = length(delta);
+                        let minDistance = particle.radius + otherParticle.radius;
+                        
+                        // 충돌이 발생한 경우
+                        if (distance < minDistance && distance > 0.001) {
+                            let normal = delta / distance;
+                            let overlap = minDistance - distance;
+                            
+                            // 위치 보정 (겹침 제거) - 더 강한 보정 적용
+                            let correction = normal * overlap * 0.8;
+                            totalCorrection += correction;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 위치 보정 적용
+    particle.position += totalCorrection;
+    particles[particleIndex] = particle;
+}
+
+// 5단계: 모든 충돌 감지 및 응답 (지형 + 월드 경계)
 @compute @workgroup_size(32)
 fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     let particleIndex = gid.x;

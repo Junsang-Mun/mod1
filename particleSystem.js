@@ -87,39 +87,53 @@ export class GPUParticleSystem {
         label: 'ParticlePhysicsShader'
       });
       
+      // 셰이더 컴파일 에러 체크
+      const compilationInfo = await shaderModule.getCompilationInfo();
+      if (compilationInfo.messages.length > 0) {
+        console.error('셰이더 컴파일 에러:', compilationInfo.messages);
+        throw new Error('셰이더 컴파일 실패');
+      }
+      
       // 파이프라인 레이아웃
       const pipelineLayout = this.device.createPipelineLayout({
         bindGroupLayouts: [this.bindGroupLayout],
         label: 'ParticlePhysicsPipelineLayout'
       });
       
-      // 컴퓨트 파이프라인들 생성
+      // 컴퓨트 파이프라인들 생성 (비동기로 생성하여 에러 체크)
       console.log('clearGrid 파이프라인 생성 중...');
-      this.clearGridPipeline = this.device.createComputePipeline({
+      this.clearGridPipeline = await this.device.createComputePipelineAsync({
         layout: pipelineLayout,
         compute: { module: shaderModule, entryPoint: 'clearGrid' },
         label: 'ClearGridPipeline'
       });
       
       console.log('assignParticlesToGrid 파이프라인 생성 중...');
-      this.assignParticlesPipeline = this.device.createComputePipeline({
+      this.assignParticlesPipeline = await this.device.createComputePipelineAsync({
         layout: pipelineLayout,
         compute: { module: shaderModule, entryPoint: 'assignParticlesToGrid' },
         label: 'AssignParticlesPipeline'
       });
       
       console.log('updatePhysics 파이프라인 생성 중...');
-      this.updatePhysicsPipeline = this.device.createComputePipeline({
+      this.updatePhysicsPipeline = await this.device.createComputePipelineAsync({
         layout: pipelineLayout,
         compute: { module: shaderModule, entryPoint: 'updatePhysics' },
         label: 'UpdatePhysicsPipeline'
       });
       
       console.log('detectCollisions 파이프라인 생성 중...');
-      this.detectCollisionsPipeline = this.device.createComputePipeline({
+      this.detectCollisionsPipeline = await this.device.createComputePipelineAsync({
         layout: pipelineLayout,
         compute: { module: shaderModule, entryPoint: 'detectCollisions' },
         label: 'DetectCollisionsPipeline'
+      });
+      
+      console.log('detectParticleCollisions 파이프라인 생성 중...');
+      this.detectParticleCollisionsPipeline = await this.device.createComputePipelineAsync({
+        layout: pipelineLayout,
+        compute: { module: shaderModule, entryPoint: 'detectParticleCollisions' },
+        label: 'DetectParticleCollisionsPipeline'
       });
       
       console.log('모든 컴퓨트 파이프라인 생성 완료');
@@ -234,7 +248,8 @@ export class GPUParticleSystem {
     
     // 컴퓨트 파이프라인이 초기화되지 않은 경우 건너뛰기
     if (!this.clearGridPipeline || !this.assignParticlesPipeline || 
-        !this.updatePhysicsPipeline || !this.detectCollisionsPipeline) {
+        !this.updatePhysicsPipeline || !this.detectCollisionsPipeline || 
+        !this.detectParticleCollisionsPipeline) {
       console.warn('컴퓨트 파이프라인이 초기화되지 않았습니다. 물리 시뮬레이션을 건너뜁니다.');
       return;
     }
@@ -260,7 +275,12 @@ export class GPUParticleSystem {
     computePass.setBindGroup(0, this.bindGroup);
     computePass.dispatchWorkgroups(particleWorkgroups);
     
-    // 4단계: 충돌 감지 및 응답
+    // 4단계: 파티클 간 충돌 감지 및 응답
+    computePass.setPipeline(this.detectParticleCollisionsPipeline);
+    computePass.setBindGroup(0, this.bindGroup);
+    computePass.dispatchWorkgroups(particleWorkgroups);
+    
+    // 5단계: 지형 및 월드 경계 충돌 감지 및 응답
     computePass.setPipeline(this.detectCollisionsPipeline);
     computePass.setBindGroup(0, this.bindGroup);
     computePass.dispatchWorkgroups(particleWorkgroups);
