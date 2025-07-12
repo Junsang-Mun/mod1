@@ -146,7 +146,7 @@ export class GPUParticleSystem {
   }
   
   // 파티클 추가
-  addParticle(position, velocity = [0, 0, 0], radius = 0.025, mass = 1.0) {
+  addParticle(position, velocity = [0, 0, 0], radius = 0.05, mass = 1.0) {
     if (this.numParticles >= this.maxParticles) {
       console.warn('최대 파티클 수에 도달했습니다.');
       return;
