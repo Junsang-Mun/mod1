@@ -201,4 +201,53 @@ export class GeometryUtils {
 
     return faceVertices;
   }
+
+  // Generate sphere faces for particle rendering (UV sphere with triangular faces)
+  static generateSphereFaces(radius = 1, center = [0, 0, 0], latitudeBands = 20, longitudeBands = 20) {
+    const faceVertices = [];
+    
+    // Generate vertices for the sphere
+    const vertices = [];
+    for (let lat = 0; lat <= latitudeBands; lat++) {
+      const theta = (lat * Math.PI) / latitudeBands;
+      const sinTheta = Math.sin(theta);
+      const cosTheta = Math.cos(theta);
+
+      for (let lon = 0; lon <= longitudeBands; lon++) {
+        const phi = (lon * 2 * Math.PI) / longitudeBands;
+        const sinPhi = Math.sin(phi);
+        const cosPhi = Math.cos(phi);
+
+        const x = cosPhi * sinTheta;
+        const y = cosTheta;
+        const z = sinPhi * sinTheta;
+
+        vertices.push([
+          x * radius + center[0],
+          y * radius + center[1],
+          z * radius + center[2]
+        ]);
+      }
+    }
+
+    // Generate triangular faces
+    for (let lat = 0; lat < latitudeBands; lat++) {
+      for (let lon = 0; lon < longitudeBands; lon++) {
+        const first = lat * (longitudeBands + 1) + lon;
+        const second = first + longitudeBands + 1;
+
+        // First triangle
+        faceVertices.push(...vertices[first]);
+        faceVertices.push(...vertices[second]);
+        faceVertices.push(...vertices[first + 1]);
+
+        // Second triangle
+        faceVertices.push(...vertices[second]);
+        faceVertices.push(...vertices[second + 1]);
+        faceVertices.push(...vertices[first + 1]);
+      }
+    }
+
+    return faceVertices;
+  }
 } 
