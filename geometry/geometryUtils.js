@@ -201,9 +201,4 @@ export class GeometryUtils {
 
     return faceVertices;
   }
-
-  // Generate single particle cube with faces (optimized for small size)
-  static generateParticleCube(size = 0.1, center = [0, 0, 0]) {
-    return this.generateCubeFaces(size, center);
-  }
 } 
