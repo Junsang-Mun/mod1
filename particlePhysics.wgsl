@@ -148,7 +148,37 @@ fn updatePhysics(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dragForce = -particle.velocity * airResistance * particle.mass;
     particle.force += dragForce;
     
-    // 3. 지형과의 충돌 체크
+    // 3. 뉴턴의 운동 법칙 적용: F = ma, a = F/m
+    let acceleration = particle.force / particle.mass;
+    
+    // 4. 속도 업데이트 (Verlet integration 방식)
+    particle.velocity += acceleration * params.deltaTime;
+    
+    // 5. 위치 업데이트
+    particle.position += particle.velocity * params.deltaTime;
+    
+    // 6. 속도 감쇠 (에너지 손실)
+    let velocityDamping = 0.999;
+    particle.velocity *= velocityDamping;
+    
+    // 7. 힘 초기화 (다음 프레임을 위해)
+    particle.force = vec3<f32>(0.0, 0.0, 0.0);
+    
+    particles[particleIndex] = particle;
+}
+
+// 4단계: 모든 충돌 감지 및 응답 (지형 + 월드 경계)
+@compute @workgroup_size(32)
+fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let particleIndex = gid.x;
+    if (particleIndex >= params.numParticles) {
+        return;
+    }
+    
+    var particle = particles[particleIndex];
+    var collisionOccurred = false;
+
+    // 1. 지형과의 충돌 체크
     let terrainHeight = getTerrainHeight(particle.position.xy);
     if (terrainHeight > -0.99 && particle.position.z <= terrainHeight + particle.radius) {
         // 지형 위에 있을 때
@@ -169,40 +199,11 @@ fn updatePhysics(@builtin(global_invocation_id) gid: vec3<u32>) {
             particle.velocity.x *= 0.95;
             particle.velocity.y *= 0.95;
         }
+        
+        collisionOccurred = true;
     }
-    
-    // 4. 뉴턴의 운동 법칙 적용: F = ma, a = F/m
-    let acceleration = particle.force / particle.mass;
-    
-    // 5. 속도 업데이트 (Verlet integration 방식)
-    particle.velocity += acceleration * params.deltaTime;
-    
-    // 6. 위치 업데이트
-    particle.position += particle.velocity * params.deltaTime;
-    
-    // 7. 속도 감쇠 (에너지 손실)
-    let velocityDamping = 0.999;
-    particle.velocity *= velocityDamping;
-    
-    // 8. 힘 초기화 (다음 프레임을 위해)
-    particle.force = vec3<f32>(0.0, 0.0, 0.0);
-    
-    particles[particleIndex] = particle;
-}
 
-// 4단계: 월드 경계 충돌 감지 및 응답
-@compute @workgroup_size(32)
-fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let particleIndex = gid.x;
-    if (particleIndex >= params.numParticles) {
-        return;
-    }
-    
-    var particle = particles[particleIndex];
-
-    // 월드 경계 체크 및 충돌 처리
-    var collisionOccurred = false;
-    
+    // 2. 월드 경계 체크 및 충돌 처리
     // X축 경계 체크
     if (particle.position.x < -params.worldBounds.x) {
         particle.position.x = -params.worldBounds.x;
