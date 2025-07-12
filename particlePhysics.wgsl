@@ -196,7 +196,7 @@ fn detectParticleCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     
     var particle = particles[particleIndex];
-    var totalCorrection = vec3<f32>(0.0, 0.0, 0.0);
+    var collisionOccurred = false;
     
     // 현재 파티클의 셀과 인접 셀들을 확인
     let currentCell = spatialHash(particle.position);
@@ -218,19 +218,39 @@ fn detectParticleCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
                     if (otherIndex != particleIndex && otherIndex < params.numParticles) {
                         let otherParticle = particles[otherIndex];
                         
-                        // 거리 기반 충돌 검사 (성능 최적화)
+                        // 거리 기반 충돌 검사
                         let delta = otherParticle.position - particle.position;
                         let distance = length(delta);
                         let minDistance = particle.radius + otherParticle.radius;
                         
-                        // 충돌이 발생한 경우
+                        // 충돌이 발생한 경우 - 월드 경계 처리와 동일한 방식으로 완전히 겹침 제거
                         if (distance < minDistance && distance > 0.001) {
                             let normal = delta / distance;
-                            let overlap = minDistance - distance;
                             
-                            // 위치 보정 (겹침 제거) - 더 강한 보정 적용
-                            let correction = normal * overlap * 0.8;
-                            totalCorrection += correction;
+                            // 완전히 겹침을 제거하기 위해 파티클을 최소 거리만큼 분리
+                            let separation = minDistance - distance;
+                            let correction = normal * separation;
+                            
+                            // 현재 파티클을 반대 방향으로 이동
+                            particle.position -= correction * 0.5;
+                            
+                            // 속도 반사 (탄성 충돌)
+                            let relativeVelocity = particle.velocity - otherParticle.velocity;
+                            let velocityAlongNormal = dot(relativeVelocity, normal);
+                            
+                            // 반발계수 적용
+                            if (velocityAlongNormal < 0.0) {
+                                let restitution = params.restitution;
+                                let impulse = -(1.0 + restitution) * velocityAlongNormal;
+                                
+                                // 질량에 따른 속도 변화
+                                let totalMass = particle.mass + otherParticle.mass;
+                                let velocityChange = impulse / totalMass;
+                                
+                                particle.velocity -= normal * velocityChange * otherParticle.mass;
+                            }
+                            
+                            collisionOccurred = true;
                         }
                     }
                 }
@@ -238,8 +258,14 @@ fn detectParticleCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     
-    // 위치 보정 적용
-    particle.position += totalCorrection;
+    // 충돌 후 속도가 매우 작을 때 정지 처리
+    if (collisionOccurred) {
+        let minVelocity = 0.01;
+        if (length(particle.velocity) < minVelocity) {
+            particle.velocity *= 0.5;
+        }
+    }
+    
     particles[particleIndex] = particle;
 }
 
@@ -319,4 +345,4 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     
     particles[particleIndex] = particle;
-} 
+}
