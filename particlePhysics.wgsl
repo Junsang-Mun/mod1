@@ -254,7 +254,7 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     var particle = particles[particleIndex];
     var collisionOccurred = false;
 
-    // 1. 지형과의 충돌 체크 (구의 중심 기준)
+    // 1. 지형과의 충돌 체크 (구의 중심 기준) - 단순화된 버전
     let terrainHeight = getTerrainHeight(particle.position.xy);
     if (terrainHeight > -0.99 && particle.position.z - particle.radius <= terrainHeight) {
         // 지형과 구가 충돌했을 때 - 구의 중심을 지형 위로 이동
@@ -269,12 +269,6 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         let terrainFriction = 0.9;
         particle.velocity.x *= terrainFriction;
         particle.velocity.y *= terrainFriction;
-        
-        // 지형에서의 정지 마찰 (속도가 매우 작을 때)
-        if (length(particle.velocity.xy) < 0.1) {
-            particle.velocity.x *= 0.95;
-            particle.velocity.y *= 0.95;
-        }
         
         collisionOccurred = true;
     }
