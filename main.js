@@ -143,8 +143,8 @@ async function init() {
   // GPU 파티클 렌더링을 위한 별도 파이프라인 설정
   let gpuParticleRenderPipeline = null;
   let gpuParticleBindGroup = null;
-  let particleCubeVertexBuffer = null;
-  let particleCubeVertexCount = 0;
+  let particleSphereVertexBuffer = null;
+  let particleSphereVertexCount = 0;
 
   async function setupGPUParticleRendering() {
     // GPU 파티클 렌더링 셰이더 모듈 생성
@@ -173,12 +173,12 @@ async function init() {
       [gpuParticleBindGroupLayout0, gpuParticleBindGroupLayout1]
     );
 
-    // 파티클 큐브 지오메트리 생성 (단위 큐브)
-    const cubeVertices = GeometryUtils.generateCubeFaces(1.0, [0, 0, 0]);
-    particleCubeVertexCount = cubeVertices.length / 3;
+    // 파티클 구체 지오메트리 생성 (작은 구체)
+    const sphereVertices = GeometryUtils.generateSphereFaces(1.0, [0, 0, 0]);
+    particleSphereVertexCount = sphereVertices.length / 3;
     
-    const cubeData = new Float32Array(cubeVertices);
-    particleCubeVertexBuffer = webgpu.createVertexBuffer(cubeData);
+    const sphereData = new Float32Array(sphereVertices);
+    particleSphereVertexBuffer = webgpu.createVertexBuffer(sphereData);
 
     // 바인딩 그룹 생성 함수
     function createGPUParticleBindGroups() {
@@ -540,22 +540,22 @@ async function init() {
     }
 
     // Render GPU particles (인스턴싱) - 다른 객체들 이후에 렌더링
-    if (gpuParticleRenderPipeline && gpuParticleBindGroup && particleCubeVertexBuffer && 
+    if (gpuParticleRenderPipeline && gpuParticleBindGroup && particleSphereVertexBuffer && 
         gpuParticleSystem && gpuParticleSystem.numParticles > 0) {
       
       // 디버깅: 렌더링 전 파티클 상태 확인 (한 번만 출력)
       if (time < 1.0 && Math.floor(time * 4) % 4 === 0) { // 0.25초마다 한번씩 출력
         console.log('GPU 파티클 렌더링 중:', {
           numParticles: gpuParticleSystem.numParticles,
-          vertexCount: particleCubeVertexCount
+          vertexCount: particleSphereVertexCount
         });
       }
       
       pass.setPipeline(gpuParticleRenderPipeline);
       pass.setBindGroup(0, gpuParticleBindGroup.bindGroup0);
       pass.setBindGroup(1, gpuParticleBindGroup.bindGroup1);
-      pass.setVertexBuffer(0, particleCubeVertexBuffer);
-      pass.draw(particleCubeVertexCount, gpuParticleSystem.numParticles, 0, 0);
+      pass.setVertexBuffer(0, particleSphereVertexBuffer);
+      pass.draw(particleSphereVertexCount, gpuParticleSystem.numParticles, 0, 0);
       
       // 렌더링 완료 메시지 (한 번만 출력)
       if (time < 0.5) {

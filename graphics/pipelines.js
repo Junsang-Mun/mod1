@@ -189,7 +189,7 @@ export class PipelineFactory {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "back",
+        cullMode: "none", // 구체가 온전히 보이도록 culling 비활성화
       },
       depthStencil: this.createDepthStencilState(),
     });
