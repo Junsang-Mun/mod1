@@ -11,9 +11,16 @@
 <body>
     <!-- Control toolbar for simulation modes and actions -->
     <div id="toolbar">
-        <!-- mod1 file input input handler -->
-        <label for="mod1Input">Load .mod1 file:</label>
-        <input id="mod1Input" type="file" accept=".mod1" />
+        <!-- Demo file selection -->
+        <label for="demoSelect">Select mod1 file:</label>
+        <select id="demoSelect">
+            <option value="">-- Select Demo --</option>
+            <option value="demo1.mod1">Demo 1</option>
+            <option value="demo2.mod1">Demo 2</option>
+            <option value="demo3.mod1">Demo 3</option>
+            <option value="demo4.mod1">Demo 4</option>
+            <option value="demo5.mod1">Demo 5</option>
+        </select>
         <!-- Mode selection: what left-click does -->
         Mode:
         <select id="modeSelect">
@@ -34,23 +41,25 @@
         <!-- Instructions -->
         <span id="info">Use left-click (per mode) on the terrain. Right-click and drag
             to rotate camera.</span>
+        <!-- Current file status -->
+        <div id="fileStatus">Current file: demo1.mod1</div>
     </div>
 
     <!-- Canvas for WebGPU rendering -->
     <canvas id="gpu-canvas" width="800" height="600"></canvas>
     <div id="floatingManual">
-        <p>q: 카메라 아래로</p>
-        <p>e: 카메라 위로</p>
-        <p>a: 카메라 왼쪽으로</p>
-        <p>d: 카메라 오른쪽으로</p>
-        <p>←: 카메라 왼쪽으로</p>
-        <p>→: 카메라 오른쪽으로</p>
-        <p>↑: 줌인</p>
-        <p>↓: 줌아웃</p>
-        <p><strong>P: GPU 파티클 추가 🎯</strong></p>
+        <h3>Camera Controls:</h3>
+        <p><strong>↑/↓:</strong> Move camera up/down</p>
+        <p><strong>←/→:</strong> Rotate camera left/right</p>
+        <p><strong>+/-:</strong> Zoom in/out</p>
+        <p><strong>Mouse Wheel:</strong> Zoom in/out</p>
+        <p><strong>R:</strong> Reset camera position</p>
+        <h3>Particle Controls:</h3>
+        <p><strong>P:</strong> Add particles</p>
+        <p><strong>C:</strong> Clear all particles</p>
     </div>
-    <!-- Include the main JavaScript logic -->
-    <script type="module" src="main.js"></script>
+    <!-- Include the main TypeScript logic -->
+    <script type="module" src="main.ts"></script>
 </body>
 
 </html>

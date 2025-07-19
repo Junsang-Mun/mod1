@@ -1,10 +1,42 @@
+import type { Vector3, ParticleData, PhysicsParams, TerrainParams } from "./types/index.js";
+
 // GPU 기반 파티클 시스템 관리자
 export class GPUParticleSystem {
-  constructor(device, maxParticles = 1000) {
+  private device: GPUDevice;
+  private maxParticles: number;
+  private numParticles: number;
+  private gridSize: number; // 32x32x32 그리드
+  
+  // Buffers
+  private particleBuffer!: GPUBuffer;
+  private paramsBuffer!: GPUBuffer;
+  private spatialGridBuffer!: GPUBuffer;
+  private terrainHeightBuffer!: GPUBuffer;
+  private terrainParamsBuffer!: GPUBuffer;
+  
+  // Bind groups and layouts
+  private bindGroupLayout!: GPUBindGroupLayout;
+  private bindGroup!: GPUBindGroup;
+  
+  // Compute pipelines
+  private clearGridPipeline: GPUComputePipeline | null;
+  private assignParticlesPipeline: GPUComputePipeline | null;
+  private updatePhysicsPipeline: GPUComputePipeline | null;
+  private detectCollisionsPipeline: GPUComputePipeline | null;
+  private detectParticleCollisionsPipeline: GPUComputePipeline | null;
+
+  constructor(device: GPUDevice, maxParticles: number = 1000) {
     this.device = device;
     this.maxParticles = maxParticles;
     this.numParticles = 0;
     this.gridSize = 32; // 32x32x32 그리드
+    
+    // Initialize pipeline references
+    this.clearGridPipeline = null;
+    this.assignParticlesPipeline = null;
+    this.updatePhysicsPipeline = null;
+    this.detectCollisionsPipeline = null;
+    this.detectParticleCollisionsPipeline = null;
     
     console.log('GPU 파티클 시스템 초기화 중...');
     this.setupBuffers();
@@ -13,7 +45,7 @@ export class GPUParticleSystem {
     console.log('GPU 파티클 시스템 초기화 완료!');
   }
   
-  setupBuffers() {
+  private setupBuffers(): void {
     // 파티클 데이터 버퍼 (48바이트 * 최대 파티클 수)
     const particleBufferSize = 48 * this.maxParticles;
     
@@ -51,7 +83,7 @@ export class GPUParticleSystem {
     });
   }
   
-  setupBindGroups() {
+  private setupBindGroups(): void {
     // 바인딩 그룹 레이아웃 생성 - 모든 리소스를 하나의 그룹에 통합
     this.bindGroupLayout = this.device.createBindGroupLayout({
       entries: [
@@ -76,7 +108,7 @@ export class GPUParticleSystem {
     });
   }
   
-  async setupComputePipelines() {
+  private async setupComputePipelines(): Promise<void> {
     try {
       // 컴퓨트 셰이더 모듈 생성
       const shaderSource = await fetch('./particlePhysics.wgsl').then(r => r.text());
@@ -146,7 +178,7 @@ export class GPUParticleSystem {
   }
   
   // 파티클 추가
-  addParticle(position, velocity = [0, 0, 0], radius = 0.05, mass = 1.0) {
+  addParticle(position: Vector3, velocity: Vector3 = [0, 0, 0], radius: number = 0.25, mass: number = 1.0): void {
     if (this.numParticles >= this.maxParticles) {
       console.warn('최대 파티클 수에 도달했습니다.');
       return;
@@ -200,7 +232,7 @@ export class GPUParticleSystem {
   }
   
   // 시뮬레이션 파라미터 업데이트
-  updateParams(deltaTime, acceleration = [0, 0, -9.8]) {
+  updateParams(deltaTime: number, acceleration: Vector3 = [0, 0, -9.8]): void {
     // 64바이트 정렬된 버퍼 생성 (WebGPU 메모리 정렬 규칙 준수)
     const buffer = new ArrayBuffer(64);
     const floatView = new Float32Array(buffer);
@@ -227,7 +259,7 @@ export class GPUParticleSystem {
   }
   
   // 지형 데이터 업데이트
-  updateTerrain(heightData, gridResolution = 50) {
+  updateTerrain(heightData: number[], gridResolution: number = 50): void {
     // 지형 높이 데이터 업데이트
     const heightArray = new Float32Array(heightData);
     this.device.queue.writeBuffer(this.terrainHeightBuffer, 0, heightArray.buffer);
@@ -243,7 +275,7 @@ export class GPUParticleSystem {
   }
   
   // 시뮬레이션 실행
-  simulate(commandEncoder) {
+  simulate(commandEncoder: GPUCommandEncoder): void {
     if (this.numParticles === 0) return;
     
     // 컴퓨트 파이프라인이 초기화되지 않은 경우 건너뛰기
@@ -299,7 +331,7 @@ export class GPUParticleSystem {
   }
   
   // 파티클 데이터 읽기 (렌더링용)
-  async readParticleData() {
+  async readParticleData(): Promise<ParticleData[]> {
     if (this.numParticles === 0) return [];
     
     const stagingBuffer = this.device.createBuffer({
@@ -319,7 +351,7 @@ export class GPUParticleSystem {
     await stagingBuffer.mapAsync(GPUMapMode.READ);
     const buffer = stagingBuffer.getMappedRange();
     
-    const particles = [];
+    const particles: ParticleData[] = [];
     for (let i = 0; i < this.numParticles; i++) {
       const byteOffset = i * 48;
       const floatView = new Float32Array(buffer, byteOffset, 11); // 11 floats
@@ -342,7 +374,7 @@ export class GPUParticleSystem {
   }
   
   // 파티클 데이터를 동기적으로 가져오기 (렌더링용)
-  getParticleVertices() {
+  getParticleVertices(): number[] {
     // 이 메서드는 GPU에서 CPU로 데이터를 복사하는 비동기 작업을 피하기 위해
     // 별도의 렌더링 전용 버퍼를 사용할 수 있습니다.
     // 현재는 간단히 빈 배열을 반환합니다.
@@ -350,11 +382,21 @@ export class GPUParticleSystem {
   }
   
   // 리소스 정리
-  destroy() {
+  destroy(): void {
     this.particleBuffer?.destroy();
     this.paramsBuffer?.destroy();
     this.spatialGridBuffer?.destroy();
     this.terrainHeightBuffer?.destroy();
     this.terrainParamsBuffer?.destroy();
+  }
+  
+  // Getter for numParticles
+  get particleCount(): number {
+    return this.numParticles;
+  }
+
+  // Getter for particle buffer (for rendering)
+  get particleBufferForRendering(): GPUBuffer {
+    return this.particleBuffer;
   }
 } 
