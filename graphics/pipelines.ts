@@ -1,12 +1,17 @@
+import type { PipelineSet } from "../types/index.js";
+
 // Rendering pipeline creation utilities
 export class PipelineFactory {
-  constructor(device, format) {
+  private device: GPUDevice;
+  private format: GPUTextureFormat | null;
+
+  constructor(device: GPUDevice, format: GPUTextureFormat | null) {
     this.device = device;
     this.format = format;
   }
 
   // Create vertex buffer layout
-  createVertexBufferLayout() {
+  createVertexBufferLayout(): GPUVertexBufferLayout {
     return {
       arrayStride: 12,
       attributes: [
@@ -20,7 +25,7 @@ export class PipelineFactory {
   }
 
   // Create depth stencil state
-  createDepthStencilState() {
+  createDepthStencilState(): GPUDepthStencilState {
     return {
       format: "depth24plus",
       depthWriteEnabled: true,
@@ -29,7 +34,7 @@ export class PipelineFactory {
   }
 
   // Create wireframe render pipeline
-  createWireframePipeline(shaderModule, bindGroupLayout) {
+  createWireframePipeline(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
@@ -42,7 +47,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main_wireframe",
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "line-list",
@@ -53,7 +58,7 @@ export class PipelineFactory {
   }
 
   // Create face render pipeline
-  createFacePipeline(shaderModule, bindGroupLayout) {
+  createFacePipeline(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
@@ -66,7 +71,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main_face",
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "triangle-list",
@@ -77,7 +82,7 @@ export class PipelineFactory {
   }
 
   // Create point render pipeline (small cubes)
-  createPointPipeline(shaderModule, bindGroupLayout) {
+  createPointPipeline(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
@@ -90,7 +95,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main_point",
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "triangle-list",
@@ -101,7 +106,7 @@ export class PipelineFactory {
   }
 
   // Create axis render pipeline
-  createAxisPipeline(shaderModule, bindGroupLayout, fragmentEntryPoint) {
+  createAxisPipeline(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout, fragmentEntryPoint: string): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
@@ -114,7 +119,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: fragmentEntryPoint,
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "line-list",
@@ -125,7 +130,7 @@ export class PipelineFactory {
   }
 
   // Create terrain render pipeline with height-based coloring
-  createTerrainPipeline(shaderModule, bindGroupLayout) {
+  createTerrainPipeline(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
@@ -138,7 +143,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_terrain",
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "triangle-list",
@@ -148,7 +153,7 @@ export class PipelineFactory {
     });
   }
 
-  createParticlePipeline(shaderModule, bindGroupLayout) {
+  createParticlePipeline(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
@@ -161,7 +166,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_particle",
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "triangle-list",
@@ -172,7 +177,7 @@ export class PipelineFactory {
   }
 
   // GPU 파티클 인스턴싱 파이프라인
-  createGPUParticlePipeline(shaderModule, bindGroupLayouts) {
+  createGPUParticlePipeline(shaderModule: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[]): GPURenderPipeline {
     return this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: bindGroupLayouts,
@@ -185,7 +190,7 @@ export class PipelineFactory {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main",
-        targets: [{ format: this.format }],
+        targets: [{ format: this.format! }],
       },
       primitive: {
         topology: "triangle-list",
@@ -196,13 +201,10 @@ export class PipelineFactory {
   }
 
   // Create all pipelines at once
-  createAllPipelines(shaderModule, bindGroupLayout) {
+  createAllPipelines(shaderModule: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout): PipelineSet {
     return {
       wireframe: this.createWireframePipeline(shaderModule, bindGroupLayout),
-      face: this.createFacePipeline(shaderModule, bindGroupLayout),
-      point: this.createPointPipeline(shaderModule, bindGroupLayout),
       terrain: this.createTerrainPipeline(shaderModule, bindGroupLayout),
-      particle: this.createParticlePipeline(shaderModule, bindGroupLayout),
       xAxis: this.createAxisPipeline(shaderModule, bindGroupLayout, "fs_main_x_axis"),
       yAxis: this.createAxisPipeline(shaderModule, bindGroupLayout, "fs_main_y_axis"),
       zAxis: this.createAxisPipeline(shaderModule, bindGroupLayout, "fs_main_z_axis"),

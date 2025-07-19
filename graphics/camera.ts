@@ -1,7 +1,16 @@
 import { MatrixUtils } from "../utils/matrixUtils.js";
+import type { Matrix4x4, Vector3, CameraPosition, CameraTarget, CameraUp } from "../types/index.js";
 
 // Camera class for handling 3D camera operations
 export class Camera {
+  public position: CameraPosition;
+  public target: CameraTarget;
+  public up: CameraUp;
+  public rotation: number; // Y-axis rotation in degrees
+  public zoom: number;
+  public baseDistance: number; // Base distance from target
+  public lastAspectRatio: number; // Track aspect ratio changes
+
   constructor() {
     this.position = { x: 3, y: 3, z: 3 };
     this.target = { x: 0, y: 0, z: 0 };
@@ -13,7 +22,7 @@ export class Camera {
   }
 
   // Update camera position based on rotation
-  updatePosition() {
+  updatePosition(): void {
     const angleRad = (this.rotation * Math.PI) / 180;
     const distance = this.baseDistance / this.zoom;
 
@@ -31,7 +40,7 @@ export class Camera {
   }
 
   // Move camera relative to its orientation
-  moveRelative(forward, right, up) {
+  moveRelative(forward: number, right: number, up: number): void {
     // Calculate camera's local coordinate system
     const forward_vec = MatrixUtils.normalize([
       this.target.x - this.position.x,
@@ -54,10 +63,10 @@ export class Camera {
   }
 
   // Create view matrix
-  createViewMatrix() {
-    const eye = [this.position.x, this.position.y, this.position.z];
-    const target = [this.target.x, this.target.y, this.target.z];
-    const up = [this.up.x, this.up.y, this.up.z];
+  createViewMatrix(): Matrix4x4 {
+    const eye: Vector3 = [this.position.x, this.position.y, this.position.z];
+    const target: Vector3 = [this.target.x, this.target.y, this.target.z];
+    const up: Vector3 = [this.up.x, this.up.y, this.up.z];
 
     // Calculate forward vector (target - eye)
     const forward = MatrixUtils.normalize([
@@ -94,7 +103,7 @@ export class Camera {
   }
 
   // Create orthographic projection matrix
-  createProjectionMatrix(canvas) {
+  createProjectionMatrix(canvas: HTMLCanvasElement): Matrix4x4 {
     // Calculate aspect ratio from actual canvas dimensions
     const aspect = canvas.width / canvas.height;
     this.lastAspectRatio = aspect;
@@ -129,4 +138,4 @@ export class Camera {
       1,
     ]);
   }
-}
+} 

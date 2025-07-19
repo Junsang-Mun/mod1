@@ -1,9 +1,15 @@
 import { GeometryUtils } from "../geometry/geometryUtils.js";
+import type { AxesBuffers } from "../types/index.js";
 
 /**
  * Manages coordinate axes rendering buffers and initialization
  */
 export class AxesManager {
+  private xAxisVertexBuffer: GPUBuffer | null;
+  private yAxisVertexBuffer: GPUBuffer | null;
+  private zAxisVertexBuffer: GPUBuffer | null;
+  private numAxisVertices: number; // Each axis is a line, so 2 vertices
+
   constructor() {
     this.xAxisVertexBuffer = null;
     this.yAxisVertexBuffer = null;
@@ -13,9 +19,9 @@ export class AxesManager {
 
   /**
    * Initialize coordinate axes buffers
-   * @param {WebGPUSetup} webgpu - WebGPU setup instance
+   * @param webgpu - WebGPU setup instance
    */
-  initialize(webgpu) {
+  initialize(webgpu: any): void {
     const axes = GeometryUtils.generateAxes();
 
     // Create axis vertex buffers
@@ -27,11 +33,11 @@ export class AxesManager {
   /**
    * Get vertex buffers for rendering
    */
-  getBuffers() {
+  getBuffers(): AxesBuffers {
     return {
-      xAxisVertexBuffer: this.xAxisVertexBuffer,
-      yAxisVertexBuffer: this.yAxisVertexBuffer,
-      zAxisVertexBuffer: this.zAxisVertexBuffer,
+      xAxisVertexBuffer: this.xAxisVertexBuffer!,
+      yAxisVertexBuffer: this.yAxisVertexBuffer!,
+      zAxisVertexBuffer: this.zAxisVertexBuffer!,
       numAxisVertices: this.numAxisVertices
     };
   }
@@ -39,7 +45,7 @@ export class AxesManager {
   /**
    * Clean up resources
    */
-  destroy() {
+  destroy(): void {
     if (this.xAxisVertexBuffer) {
       this.xAxisVertexBuffer.destroy();
       this.xAxisVertexBuffer = null;

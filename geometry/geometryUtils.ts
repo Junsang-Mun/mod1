@@ -1,10 +1,26 @@
+import type { Vector3, Point3D, Mod1Point } from "../types/index.js";
+
+interface GridVertex {
+  x: number;
+  y: number;
+  z: number;
+  i: number;
+  j: number;
+}
+
+interface AxesData {
+  xAxis: number[];
+  yAxis: number[];
+  zAxis: number[];
+}
+
 // Geometry generation utilities
 export class GeometryUtils {
   
   // Generate cube geometry
-  static generateCube(size = 1, center = [0, 0, 0]) {
+  static generateCube(size: number = 1, center: Vector3 = [0, 0, 0]): Vector3[] {
     const halfSize = size / 2;
-    const vertices = [
+    const vertices: Vector3[] = [
       [-halfSize, -halfSize, -halfSize],  // 0: 아래 면 왼쪽 뒤
       [halfSize, -halfSize, -halfSize],   // 1: 아래 면 오른쪽 뒤
       [halfSize, halfSize, -halfSize],    // 2: 아래 면 오른쪽 앞
@@ -16,19 +32,19 @@ export class GeometryUtils {
     ];
 
     // Apply center offset
-    const centeredVertices = vertices.map(v => [
+    const centeredVertices: Vector3[] = vertices.map(v => [
       v[0] + center[0],
       v[1] + center[1],
       v[2] + center[2]
-    ]);
+    ] as Vector3);
 
     return centeredVertices;
   }
 
   // Generate cube edges for wireframe
-  static generateCubeEdges(size = 1, center = [0, 0, 0]) {
+  static generateCubeEdges(size: number = 1, center: Vector3 = [0, 0, 0]): number[] {
     const vertices = this.generateCube(size, center);
-    const edges = [
+    const edges: [number, number][] = [
       // 아래 면의 4개 모서리
       [0, 1], [1, 2], [2, 3], [3, 0],
       // 위 면의 4개 모서리  
@@ -37,7 +53,7 @@ export class GeometryUtils {
       [0, 4], [1, 5], [2, 6], [3, 7],
     ];
 
-    const wireframeVertices = [];
+    const wireframeVertices: number[] = [];
     for (const edge of edges) {
       for (const i of edge) {
         wireframeVertices.push(...vertices[i]);
@@ -48,9 +64,9 @@ export class GeometryUtils {
   }
 
   // Generate cube bottom face triangles
-  static generateCubeBottomFace(size = 1, center = [0, 0, 0]) {
+  static generateCubeBottomFace(size: number = 1, center: Vector3 = [0, 0, 0]): number[] {
     const vertices = this.generateCube(size, center);
-    const bottomFaceVertices = [];
+    const bottomFaceVertices: number[] = [];
 
     // 첫 번째 삼각형: 0, 1, 2
     bottomFaceVertices.push(...vertices[0], ...vertices[1], ...vertices[2]);
@@ -61,7 +77,7 @@ export class GeometryUtils {
   }
 
   // Generate terrain mesh from points using interpolation
-  static generateTerrain(points, gridResolution = 50, terrainSize = 2) {
+  static generateTerrain(points: Mod1Point[], gridResolution: number = 50, terrainSize: number = 2): number[] {
     if (!points || points.length === 0) {
       return [];
     }
@@ -73,7 +89,7 @@ export class GeometryUtils {
     const maxY = 1;
 
     // Generate grid vertices with interpolated heights
-    const gridVertices = [];
+    const gridVertices: GridVertex[] = [];
     const stepX = (maxX - minX) / (gridResolution - 1);
     const stepY = (maxY - minY) / (gridResolution - 1);
 
@@ -89,7 +105,7 @@ export class GeometryUtils {
     this.addHeightToTerrain(gridVertices, points);
 
     // Generate triangles from grid
-    const terrainVertices = [];
+    const terrainVertices: number[] = [];
     
     for (let i = 0; i < gridResolution - 1; i++) {
       for (let j = 0; j < gridResolution - 1; j++) {
@@ -114,7 +130,7 @@ export class GeometryUtils {
     return terrainVertices;
   }
 
-  static addHeightToTerrain(gridVertices, points) {
+  static addHeightToTerrain(gridVertices: GridVertex[], points: Mod1Point[]): void {
     if (!points || points.length === 0) {
       return;
     }
@@ -163,7 +179,7 @@ export class GeometryUtils {
   }
 
   // Generate coordinate axes
-  static generateAxes(length = 1.5) {
+  static generateAxes(length: number = 1.5): AxesData {
     return {
       xAxis: [0.0, 0.0, 0.0, length, 0.0, 0.0],
       yAxis: [0.0, 0.0, 0.0, 0.0, length, 0.0],
@@ -172,12 +188,12 @@ export class GeometryUtils {
   }
 
   // Generate cube faces for particle rendering (all 6 faces as triangles)
-  static generateCubeFaces(size = 1, center = [0, 0, 0]) {
+  static generateCubeFaces(size: number = 1, center: Vector3 = [0, 0, 0]): number[] {
     const vertices = this.generateCube(size, center);
-    const faceVertices = [];
+    const faceVertices: number[] = [];
 
     // Define faces as triangles (2 triangles per face)
-    const faces = [
+    const faces: number[][] = [
       // Front face (z = +halfSize)
       [4, 5, 6], [4, 6, 7],
       // Back face (z = -halfSize)  
@@ -203,11 +219,11 @@ export class GeometryUtils {
   }
 
   // Generate sphere faces for particle rendering (UV sphere with triangular faces)
-  static generateSphereFaces(radius = 1, center = [0, 0, 0], latitudeBands = 20, longitudeBands = 20) {
-    const faceVertices = [];
+  static generateSphereFaces(radius: number = 1, center: Vector3 = [0, 0, 0], latitudeBands: number = 20, longitudeBands: number = 20): number[] {
+    const faceVertices: number[] = [];
     
     // Generate vertices for the sphere
-    const vertices = [];
+    const vertices: Vector3[] = [];
     for (let lat = 0; lat <= latitudeBands; lat++) {
       const theta = (lat * Math.PI) / latitudeBands;
       const sinTheta = Math.sin(theta);

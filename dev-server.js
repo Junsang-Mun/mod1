@@ -18,27 +18,41 @@ const server = Bun.serve({
     try {
       let filePath = path.slice(1); // Remove leading slash
       
-      // Handle TypeScript files
-      if (filePath.endsWith('.ts')) {
-        // For TypeScript files, we'll serve them as JavaScript
-        // Bun will automatically transpile them
-        const tsFile = Bun.file(filePath);
-        if (await tsFile.exists()) {
+          // Handle TypeScript files
+    if (filePath.endsWith('.ts')) {
+      // For TypeScript files, we'll serve them as JavaScript
+      // Bun will automatically transpile them
+      const tsFile = Bun.file(filePath);
+      if (await tsFile.exists()) {
+        try {
           // Read and transpile TypeScript to JavaScript
           const content = await tsFile.text();
-          const transpiled = await Bun.transform(content, {
-            loader: "ts",
-            target: "esnext"
+          
+          // Use Bun's built-in TypeScript support
+          const transpiled = await Bun.build({
+            entrypoints: [filePath],
+            target: "browser",
+            format: "esm",
+            sourcemap: "none"
           });
           
-          return new Response(transpiled.code, {
-            headers: {
-              "Content-Type": "application/javascript",
-              "Cache-Control": "no-cache"
-            }
-          });
+          if (transpiled.success) {
+            const output = await transpiled.outputs[0].text();
+            return new Response(output, {
+              headers: {
+                "Content-Type": "application/javascript",
+                "Cache-Control": "no-cache"
+              }
+            });
+          } else {
+            throw new Error("Build failed");
+          }
+        } catch (error) {
+          console.error(`Error transpiling ${filePath}:`, error);
+          return new Response(`Error transpiling TypeScript: ${error.message}`, { status: 500 });
         }
       }
+    }
       
       // Handle regular files
       const file = Bun.file(filePath);
