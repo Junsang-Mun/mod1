@@ -46,11 +46,24 @@ async function init(): Promise<(() => void) | undefined> {
   }
 
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
-  const mod1Input = document.getElementById("mod1Input") as HTMLInputElement;
+  const demoSelect = document.getElementById("demoSelect") as HTMLSelectElement;
 
   if (!canvas) {
     console.error('Canvas element not found');
     return;
+  }
+
+  // Add demo selection event listener
+  if (demoSelect) {
+    demoSelect.addEventListener('change', async (event: Event) => {
+      const target = event.target as HTMLSelectElement;
+      const selectedDemo = target.value;
+      
+      if (selectedDemo) {
+        console.log('Loading demo file:', selectedDemo);
+        await loadMod1FileByName(selectedDemo);
+      }
+    });
   }
   
   console.log('Canvas found:', canvas);
@@ -235,6 +248,12 @@ async function init(): Promise<(() => void) | undefined> {
         gpuParticleSystem.updateTerrain(terrainHeightData);
       }
 
+      // Update file status display
+      const fileStatus = document.getElementById('fileStatus');
+      if (fileStatus) {
+        fileStatus.textContent = `Current file: ${fileName}`;
+      }
+
       console.log('지형 생성 완료:', {
         terrainVertices: numTerrainVertices,
         wireframeVertices: numWireframeVertices,
@@ -248,14 +267,14 @@ async function init(): Promise<(() => void) | undefined> {
 
 
 
-  // Load default mod1 file
-  async function loadDefaultMod1(): Promise<void> {
+  // Load mod1 file by filename
+  async function loadMod1FileByName(fileName: string): Promise<void> {
     try {
-      const response = await fetch('./assets/demo1.mod1');
+      const response = await fetch(`./assets/${fileName}`);
       const text = await response.text();
-      await loadMod1File(text, 'demo1.mod1');
+      await loadMod1File(text, fileName);
     } catch (error) {
-      console.error('기본 Mod1 파일 로드 실패:', error);
+      console.error(`Failed to load mod1 file ${fileName}:`, error);
     }
   }
 
@@ -644,8 +663,12 @@ async function init(): Promise<(() => void) | undefined> {
   // Setup GPU particle rendering
   await setupGPUParticleRendering();
 
-  // Load default mod1 file automatically
-  await loadDefaultMod1();
+  // Initialize with first demo file if available
+  if (demoSelect && demoSelect.options.length > 1) {
+    const firstDemo = demoSelect.options[1].value; // Skip the "-- Select Demo --" option
+    demoSelect.value = firstDemo;
+    await loadMod1FileByName(firstDemo);
+  }
 
   // Set initial MVP matrix
   const initialMvpMatrix = computeMVPMatrix();

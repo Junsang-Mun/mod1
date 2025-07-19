@@ -11,9 +11,16 @@
 <body>
     <!-- Control toolbar for simulation modes and actions -->
     <div id="toolbar">
-        <!-- mod1 file input input handler -->
-        <label for="mod1Input">Load .mod1 file:</label>
-        <input id="mod1Input" type="file" accept=".mod1" />
+        <!-- Demo file selection -->
+        <label for="demoSelect">Select mod1 file:</label>
+        <select id="demoSelect">
+            <option value="">-- Select Demo --</option>
+            <option value="demo1.mod1">Demo 1</option>
+            <option value="demo2.mod1">Demo 2</option>
+            <option value="demo3.mod1">Demo 3</option>
+            <option value="demo4.mod1">Demo 4</option>
+            <option value="demo5.mod1">Demo 5</option>
+        </select>
         <!-- Mode selection: what left-click does -->
         Mode:
         <select id="modeSelect">
@@ -34,6 +41,8 @@
         <!-- Instructions -->
         <span id="info">Use left-click (per mode) on the terrain. Right-click and drag
             to rotate camera.</span>
+        <!-- Current file status -->
+        <div id="fileStatus">Current file: demo1.mod1</div>
     </div>
 
     <!-- Canvas for WebGPU rendering -->
