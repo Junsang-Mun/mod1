@@ -379,27 +379,6 @@ async function init(): Promise<(() => void) | undefined> {
     const zoomSpeed = CAMERA_ZOOM_SPEED;
 
     switch (event.key.toLowerCase()) {
-      // Camera movement
-      case 'w':
-        // Move forward
-        camera.moveRelative(moveSpeed, 0, 0);
-        console.log('Camera moved forward');
-        break;
-      case 's':
-        // Move backward
-        camera.moveRelative(-moveSpeed, 0, 0);
-        console.log('Camera moved backward');
-        break;
-      case 'a':
-        // Move left
-        camera.moveRelative(0, -moveSpeed, 0);
-        console.log('Camera moved left');
-        break;
-      case 'd':
-        // Move right
-        camera.moveRelative(0, moveSpeed, 0);
-        console.log('Camera moved right');
-        break;
       case 'arrowup':
         // Move up
         camera.moveRelative(0, 0, moveSpeed);
