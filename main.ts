@@ -400,12 +400,12 @@ async function init(): Promise<(() => void) | undefined> {
         camera.moveRelative(0, moveSpeed, 0);
         console.log('Camera moved right');
         break;
-      case 'q':
+      case 'arrowup':
         // Move up
         camera.moveRelative(0, 0, moveSpeed);
         console.log('Camera moved up');
         break;
-      case 'e':
+      case 'arrowdown':
         // Move down
         camera.moveRelative(0, 0, -moveSpeed);
         console.log('Camera moved down');
