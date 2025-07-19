@@ -282,9 +282,9 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // 1. 지형과의 충돌 체크 (구의 중심 기준) - 단순화된 버전
     let terrainHeight = getTerrainHeight(particle.position.xy);
-    if (terrainHeight > -0.99 && particle.position.z - particle.radius <= terrainHeight) {
+    if (particle.position.z <= terrainHeight) {
         // 지형과 구가 충돌했을 때 - 구의 중심을 지형 위로 이동
-        particle.position.z = terrainHeight + particle.radius;
+        particle.position.z = terrainHeight;
         
         // 수직 속도 제거 (지형과의 충돌)
         if (particle.velocity.z < 0.0) {

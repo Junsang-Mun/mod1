@@ -229,8 +229,8 @@ async function init(): Promise<(() => void) | undefined> {
       wireframeVertexBuffer = webgpu.createVertexBuffer(new Float32Array(wireframeVertices));
       numWireframeVertices = wireframeVertices.length / 3;
 
-      // Update terrain height data for particle physics
-      terrainHeightData = generateTerrainHeightData(mod1Data.points);
+      // Update terrain height data for particle physics (using common function)
+      terrainHeightData = GeometryUtils.generateTerrainHeightData(mod1Data.points);
       if (gpuParticleSystem) {
         gpuParticleSystem.updateTerrain(terrainHeightData);
       }
@@ -246,34 +246,7 @@ async function init(): Promise<(() => void) | undefined> {
     }
   }
 
-  // Generate terrain height data
-  function generateTerrainHeightData(points: Mod1Point[]): number[] {
-    const gridResolution = 50;
-    const heightData: number[] = [];
-    
-    for (let i = 0; i < gridResolution; i++) {
-      for (let j = 0; j < gridResolution; j++) {
-        const x = (i / (gridResolution - 1)) * 2 - 1;
-        const y = (j / (gridResolution - 1)) * 2 - 1;
-        
-        // Find closest point and use its height
-        let minDistance = Infinity;
-        let height = -1;
-        
-        for (const point of points) {
-          const distance = Math.sqrt((x - point.x) ** 2 + (y - point.y) ** 2);
-          if (distance < minDistance) {
-            minDistance = distance;
-            height = point.z;
-          }
-        }
-        
-        heightData.push(height);
-      }
-    }
-    
-    return heightData;
-  }
+
 
   // Load default mod1 file
   async function loadDefaultMod1(): Promise<void> {
