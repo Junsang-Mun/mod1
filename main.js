@@ -13,14 +13,23 @@ let depthTexture;
 
 // GPU 파티클 시스템 전역 변수
 let gpuParticleSystem;
-let lastFrameTime = performance.now();
+let lastFrameTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let terrainHeightData = [];
 
-window.addEventListener("DOMContentLoaded", () => {
-  init().catch((err) => console.error("Initialization error:", err));
-});
+// Check if we're in a browser environment
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener("DOMContentLoaded", () => {
+    init().catch((err) => console.error("Initialization error:", err));
+  });
+}
 
 async function init() {
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    console.warn('Browser environment not available. Skipping initialization.');
+    return;
+  }
+
   const canvas = document.getElementById("gpu-canvas");
   const mod1Input = document.getElementById("mod1Input");
 
@@ -439,15 +448,20 @@ async function init() {
   });
 
   // Render loop
-  let startTime = performance.now();
+  let startTime = typeof performance !== 'undefined' ? performance.now() : 0;
   function frame() {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || typeof requestAnimationFrame === 'undefined') {
+      return;
+    }
+
     // Ensure all required resources are available before proceeding.
     if (!wireframeVertexBuffer || !terrainVertexBuffer || !depthTexture) {
       requestAnimationFrame(frame);
       return;
     }
 
-    const now = performance.now();
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
     const deltaTime = Math.min((now - lastFrameTime) * 0.001, 0.016); // 최대 16ms로 제한
     lastFrameTime = now;
 
@@ -575,7 +589,9 @@ async function init() {
 
     pass.end();
     webgpu.submitCommands([encoder.finish()]);
-    requestAnimationFrame(frame);
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(frame);
+    }
   }
 
   // Initialize coordinate axes
@@ -589,10 +605,17 @@ async function init() {
   webgpu.writeBuffer(mvpBuffer, 0, initialMvpMatrix);
 
   // Start render loop
-  requestAnimationFrame(frame);
+  if (typeof requestAnimationFrame !== 'undefined') {
+    requestAnimationFrame(frame);
+  }
 
   // Return cleanup function
   return () => {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
     // Remove event listeners
     window.removeEventListener("resize", updateCanvasSize);
     window.removeEventListener("orientationchange", updateCanvasSize);

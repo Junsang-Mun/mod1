@@ -1,0 +1,25 @@
+{
+    "name": "webgpu-water-flow-simulation",
+    "version": "1.0.0",
+    "description": "WebGPU Water Flow Simulation with Particle Physics",
+    "main": "main.js",
+    "type": "module",
+    "scripts": {
+        "dev": "bun dev-server.js",
+        "start": "bun dev-server.js",
+    },
+    "keywords": [
+        "webgpu",
+        "water-simulation",
+        "particle-physics",
+        "3d-graphics"
+    ],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "bun": "latest"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
