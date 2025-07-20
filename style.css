@@ -25,6 +25,12 @@ body {
     font-size: 13px;
     color: #ccc;
 }
+#fileStatus {
+    margin-left: 16px;
+    font-size: 13px;
+    color: #4CAF50;
+    font-weight: bold;
+}
 #gpu-canvas {
     display: block;
     margin: 0;

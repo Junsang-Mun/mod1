@@ -282,9 +282,9 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // 1. 지형과의 충돌 체크 (구의 중심 기준) - 단순화된 버전
     let terrainHeight = getTerrainHeight(particle.position.xy);
-    if (terrainHeight > -0.99 && particle.position.z - particle.radius <= terrainHeight) {
+    if (particle.position.z <= terrainHeight) {
         // 지형과 구가 충돌했을 때 - 구의 중심을 지형 위로 이동
-        particle.position.z = terrainHeight + particle.radius;
+        particle.position.z = terrainHeight;
         
         // 수직 속도 제거 (지형과의 충돌)
         if (particle.velocity.z < 0.0) {
@@ -299,39 +299,39 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         collisionOccurred = true;
     }
 
-    // 2. 월드 경계 체크 및 충돌 처리 (구의 중심 기준)
-    // X축 경계 체크 - 구의 반지름 고려
-    if (particle.position.x - particle.radius < -params.worldBounds.x) {
-        particle.position.x = -params.worldBounds.x + particle.radius;
+    // 2. 월드 경계 체크 및 충돌 처리 (점 기준)
+    // X축 경계 체크
+    if (particle.position.x < -params.worldBounds.x) {
+        particle.position.x = -params.worldBounds.x;
         particle.velocity.x = -particle.velocity.x * params.restitution;
         collisionOccurred = true;
-    } else if (particle.position.x + particle.radius > params.worldBounds.x) {
-        particle.position.x = params.worldBounds.x - particle.radius;
+    } else if (particle.position.x > params.worldBounds.x) {
+        particle.position.x = params.worldBounds.x;
         particle.velocity.x = -particle.velocity.x * params.restitution;
         collisionOccurred = true;
     }
     
-    // Y축 경계 체크 - 구의 반지름 고려
-    if (particle.position.y - particle.radius < -params.worldBounds.y) {
-        particle.position.y = -params.worldBounds.y + particle.radius;
+    // Y축 경계 체크
+    if (particle.position.y < -params.worldBounds.y) {
+        particle.position.y = -params.worldBounds.y;
         particle.velocity.y = -particle.velocity.y * params.restitution;
         collisionOccurred = true;
-    } else if (particle.position.y + particle.radius > params.worldBounds.y) {
-        particle.position.y = params.worldBounds.y - particle.radius;
+    } else if (particle.position.y > params.worldBounds.y) {
+        particle.position.y = params.worldBounds.y;
         particle.velocity.y = -particle.velocity.y * params.restitution;
         collisionOccurred = true;
     }
     
-    // Z축 경계 체크 (바닥과 천장) - 구의 반지름 고려
-    if (particle.position.z - particle.radius < -params.worldBounds.z) {
-        particle.position.z = -params.worldBounds.z + particle.radius;
+    // Z축 경계 체크 (바닥과 천장)
+    if (particle.position.z < -params.worldBounds.z) {
+        particle.position.z = -params.worldBounds.z;
         particle.velocity.z = -particle.velocity.z * params.restitution;
         // 바닥 충돌 시 마찰 효과 적용
         particle.velocity.x *= params.friction;
         particle.velocity.y *= params.friction;
         collisionOccurred = true;
-    } else if (particle.position.z + particle.radius > params.worldBounds.z) {
-        particle.position.z = params.worldBounds.z - particle.radius;
+    } else if (particle.position.z > params.worldBounds.z) {
+        particle.position.z = params.worldBounds.z;
         particle.velocity.z = -particle.velocity.z * params.restitution;
         collisionOccurred = true;
     }
