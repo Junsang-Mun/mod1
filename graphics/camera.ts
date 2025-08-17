@@ -1,3 +1,4 @@
+import { Vector3 as MathVector3 } from '@math.gl/core';
 import { MatrixUtils } from "../utils/matrixUtils.js";
 import type { Matrix4x4, Vector3, CameraPosition, CameraTarget, CameraUp } from "../types/index.js";
 
@@ -26,83 +27,65 @@ export class Camera {
     const angleRad = (this.rotation * Math.PI) / 180;
     const distance = this.baseDistance / this.zoom;
 
+    // Use math.gl Vector3 for position calculations
+    const currentPos = new MathVector3([this.position.x, this.position.y, this.position.z]);
+    
     // Calculate position in spherical coordinates
-    const elevation = Math.atan2(
-      this.position.z,
-      Math.sqrt(
-        this.position.x * this.position.x + this.position.y * this.position.y,
-      ),
-    );
+    const horizontalDistance = Math.sqrt(currentPos.x * currentPos.x + currentPos.y * currentPos.y);
+    const elevation = Math.atan2(currentPos.z, horizontalDistance);
 
-    this.position.x = distance * Math.cos(elevation) * Math.cos(angleRad);
-    this.position.y = distance * Math.cos(elevation) * Math.sin(angleRad);
-    this.position.z = distance * Math.sin(elevation);
+    // Calculate new position using spherical coordinates
+    const newPosition = new MathVector3([
+      distance * Math.cos(elevation) * Math.cos(angleRad),
+      distance * Math.cos(elevation) * Math.sin(angleRad),
+      distance * Math.sin(elevation)
+    ]);
+
+    this.position.x = newPosition.x;
+    this.position.y = newPosition.y;
+    this.position.z = newPosition.z;
   }
 
   // Move camera relative to its orientation
   moveRelative(forward: number, right: number, up: number): void {
-    // Calculate camera's local coordinate system
-    const forward_vec = MatrixUtils.normalize([
-      this.target.x - this.position.x,
-      this.target.y - this.position.y,
-      this.target.z - this.position.z,
-    ]);
+    // Use math.gl Vector3 for camera's local coordinate system calculations
+    const position = new MathVector3([this.position.x, this.position.y, this.position.z]);
+    const target = new MathVector3([this.target.x, this.target.y, this.target.z]);
+    const upVector = new MathVector3([this.up.x, this.up.y, this.up.z]);
 
-    const right_vec = MatrixUtils.normalize(
-      MatrixUtils.cross(forward_vec, [this.up.x, this.up.y, this.up.z]),
-    );
-    const up_vec = MatrixUtils.cross(right_vec, forward_vec);
+    // Calculate forward vector (target - position) and normalize
+    const forward_vec = new MathVector3(target).subtract(position).normalize();
+    
+    // Calculate right vector (forward × up) and normalize
+    const right_vec = new MathVector3(forward_vec).cross(upVector).normalize();
+    
+    // Calculate up vector (right × forward)
+    const up_vec = new MathVector3(right_vec).cross(forward_vec);
 
-    // Apply movement
-    this.position.x +=
-      right_vec[0] * right + forward_vec[0] * forward + up_vec[0] * up;
-    this.position.y +=
-      right_vec[1] * right + forward_vec[1] * forward + up_vec[1] * up;
-    this.position.z +=
-      right_vec[2] * right + forward_vec[2] * forward + up_vec[2] * up;
+    // Create movement vector
+    const movement = new MathVector3()
+      .add(new MathVector3(right_vec).scale(right))
+      .add(new MathVector3(forward_vec).scale(forward))
+      .add(new MathVector3(up_vec).scale(up));
+
+    // Apply movement to position
+    const newPosition = new MathVector3(position).add(movement);
+    this.position.x = newPosition.x;
+    this.position.y = newPosition.y;
+    this.position.z = newPosition.z;
   }
 
-  // Create view matrix
+  // Create view matrix using math.gl lookAt function
   createViewMatrix(): Matrix4x4 {
     const eye: Vector3 = [this.position.x, this.position.y, this.position.z];
-    const target: Vector3 = [this.target.x, this.target.y, this.target.z];
+    const center: Vector3 = [this.target.x, this.target.y, this.target.z];
     const up: Vector3 = [this.up.x, this.up.y, this.up.z];
 
-    // Calculate forward vector (target - eye)
-    const forward = MatrixUtils.normalize([
-      target[0] - eye[0],
-      target[1] - eye[1],
-      target[2] - eye[2],
-    ]);
-
-    // Calculate right vector (forward × up)
-    const right = MatrixUtils.normalize(MatrixUtils.cross(forward, up));
-
-    // Calculate new up vector (right × forward)
-    const newUp = MatrixUtils.cross(right, forward);
-
-    // Create view matrix
-    return new Float32Array([
-      right[0],
-      newUp[0],
-      -forward[0],
-      0,
-      right[1],
-      newUp[1],
-      -forward[1],
-      0,
-      right[2],
-      newUp[2],
-      -forward[2],
-      0,
-      -MatrixUtils.dot(right, eye),
-      -MatrixUtils.dot(newUp, eye),
-      MatrixUtils.dot(forward, eye),
-      1,
-    ]);
+    // Use MatrixUtils.lookAt which internally uses math.gl Matrix4.lookAt
+    return MatrixUtils.lookAt(eye, center, up);
   }
 
-  // Create orthographic projection matrix
+  // Create orthographic projection matrix using math.gl
   createProjectionMatrix(canvas: HTMLCanvasElement): Matrix4x4 {
     // Calculate aspect ratio from actual canvas dimensions
     const aspect = canvas.width / canvas.height;
@@ -119,23 +102,7 @@ export class Camera {
     const near = -10;
     const far = 10;
 
-    return new Float32Array([
-      2 / (right - left),
-      0,
-      0,
-      0,
-      0,
-      2 / (top - bottom),
-      0,
-      0,
-      0,
-      0,
-      -2 / (far - near),
-      0,
-      -(right + left) / (right - left),
-      -(top + bottom) / (top - bottom),
-      -(far + near) / (far - near),
-      1,
-    ]);
+    // Use MatrixUtils.orthographic which internally uses math.gl Matrix4.ortho
+    return MatrixUtils.orthographic(left, right, bottom, top, near, far);
   }
 } 
